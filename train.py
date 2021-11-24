@@ -277,6 +277,7 @@ def train(params):
     # model
     encoder = get_encoder(params, device).to(device)
     decoder = get_decoder(params, device)
+    # THIS IS PHI
     emb2emb = get_emb2emb(params, encoder, train)
     loss_fn = get_lossfn(params, encoder, train)
     mode = get_mode(params)

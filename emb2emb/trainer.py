@@ -14,6 +14,7 @@ MODE_FINETUNEDECODER = "finetune_decoder"
 MODE_SEQ2SEQFREEZE = "seq2seq_freeze"
 
 
+# THIS IS PHI
 class Emb2Emb(nn.Module):
     """This class encapsulates the computations happening in the Task-Learning phase of the Emb2Emb framework during
     training and inference.
@@ -22,7 +23,7 @@ class Emb2Emb(nn.Module):
 
     #. Train an autoencoder to receive and encoder and a decoder.
     #. Freeze the encoder and decoder.
-    #. Train a mapping in the autoencoder embedding space that maps the 
+    #. Train a mapping in the autoencoder embedding space that maps the
         encoding of the input to the encoding of the (desired) output.
     #. At inference time, encode the input, plug it into the mapping, (optionally)
         apply Fast-Gradient-Iterative-Modification, and plug the result into the decoder.
@@ -36,18 +37,18 @@ class Emb2Emb(nn.Module):
     are not necessarily such that the decoder can deal with them. To mitigate this
     issue, training in Emb2Emb uses an optional adversarial loss term that encourages
     the mapping to keep its outputs on the manifold of the autoencoder such that the
-    decoder can more likely handle them well. 
+    decoder can more likely handle them well.
 
     :param encoder: Used for encoding the input and, if provided, the output sequence.
     :type encoder: class:`mapping.encoding.Encoder`
-    :param decoder: Used for decoding the output of the mapping. 
+    :param decoder: Used for decoding the output of the mapping.
     :type decoder: class:`mapping.encoding.Decoder`
     :param mapping: Used for transforming the embedding of the input to the embedding of the output.
     :type mapping: class:`emb2emb.mapping.Mapping`
     :param loss_fn: A loss function for regression problems, i.e., it must take as input
         a pair (predicted, true) of embedding tensors of shape [batch size, embedding_dim].
     :type loss_fn: class:`torch.nn.Module`
-    :param mode: 
+    :param mode:
     :type mode:
     :param use_adversarial_term: If set, adversarial regularization term will be used.
     :param adversarial_lambda Weight of the adversarial loss term.
@@ -259,7 +260,9 @@ class Emb2Emb(nn.Module):
 
     def compute_emb2emb(self, Sx_batch):
         # encode input
-        X_embeddings = self._encode(Sx_batch)
+        print(Sx_batch)
+        noise = None # TODO
+        X_embeddings = self._encode(Sx_batch + noise)
 
         # mapping step
         if not self.training:  # measure the time it takes to run through mapping, but only at inference time
