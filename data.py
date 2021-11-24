@@ -53,6 +53,22 @@ def get_data(params):
             params.binary_classifier = None
         params.current_epoch = 0
         return _get_data_pairs(params), evaluate_yelp
+    elif 'gigaword' in params.dataset_path:
+        params.run_id = randint(0, 999999999)
+        # load the perplexity regressor
+        if params.perplexity_regressor_path == "no_eval":
+            params.perplexity_regressor_path = -1  # do not eval binary accuracy
+        #TODO load a pretrained model
+        # elif params.perplexity_regressor_path is not None:
+        #     params.binary_tokenizer = AutoTokenizer.from_pretrained(
+        #         params.perplexity_regressor_path)
+        #     params.binary_classifier = AutoModelForSequenceClassification.from_pretrained(
+        #         params.perplexity_regressor_path)
+        else:
+            params.perplexity_regressor_path = None
+        params.current_epoch = 0
+        # TODOJusty
+        return _get_data_pairs(params), evaluate_wiki
     else:
         raise ValueError("Don't know dataset " + str(params.dataset_path))
 
@@ -337,7 +353,6 @@ def _get_data_pairs(params):
     data_dict = {e: {} for e in endings}
     for ending in endings:
         s1 = read_file(join(dataset_path, "s1." + ending), params)
-        s1 = s1
         s2 = read_file(join(dataset_path, "s2." + ending), params)
         data_dict[ending]["Sx"] = s1 if not params.invert_style else s2
         data_dict[ending]["Sy"] = s2 if not params.invert_style else s1

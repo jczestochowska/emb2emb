@@ -1,3 +1,4 @@
+import random
 import sys
 sys.path.append("../")
 
@@ -89,6 +90,10 @@ def generate_dataset_with_tokenizer(TEXT_FILE,
                         DATASET_FILE + str(file_counter) + ".h5", 'w')
 
             for line in f:
+
+                # if random.randrange(0, 6) < 5:
+                #     # choose only 1/6 of all the training data
+                #     continue
 
                 ided = TOKENIZER.encode(
                     "<SOS>" + line.rstrip() + "<EOS>").ids

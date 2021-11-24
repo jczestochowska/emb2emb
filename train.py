@@ -10,10 +10,11 @@ import torch
 import torch.nn as nn
 
 from torch.nn.modules.loss import MSELoss, CrossEntropyLoss
-from emb2emb.losses import CosineLoss, FlipLoss
+from emb2emb.losses import CosineLoss, FlipLoss, SummaryLoss
 from classifier import train_binary_classifier
 from emb2emb.fgim import binary_classification_criterion,\
     make_binary_classification_loss, not_matched
+from regressor import train_perplexity_regressor
 
 DEFAULT_CONFIG = "autoencoders/config/default.json"
 
@@ -27,7 +28,9 @@ def get_train_parser():
     parser = argparse.ArgumentParser(description='Emb2Emb')
     # paths
     parser.add_argument("--dataset_path", type=str,
-                        required=True, choices=["data/yelp", "data/wikilarge"], help="Path to dataset")
+                        required=True,
+                        # choices=["data/yelp", "data/wikilarge_downsampled", "data/gigaword"],
+                        help="Path to dataset")
     parser.add_argument("--outputdir", type=str,
                         default='savedir/', help="Output directory")
     parser.add_argument("--outputmodelname", type=str, default='model.pickle')
@@ -41,6 +44,8 @@ def get_train_parser():
                         help="If 'input' is specified, we use the target sequence embeddings for adversarial regularization. Otherwise randomly sample from the data file given at the path.")
     parser.add_argument("--binary_classifier_path", type=str, default=None,
                         help="Path to the BERT SequenceClassification model and it's tokenizer.")
+    parser.add_argument("--perplexity_regressor_path", type=str, default=None,
+                        help="Path to the Perplexity Regressor Model model and it's tokenizer.")
     parser.add_argument("--output_file", type=str, default='output.csv',
                         help="Output file for csv to store results.")
     parser.add_argument("--load_emb2emb_path", type=str, default=None,
@@ -51,10 +56,13 @@ def get_train_parser():
     parser.add_argument("--validation_frequency", type=int, default=-1)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--lr_bclf", type=float, default=0.0001)
+    parser.add_argument("--lr_pxtyreg", type=float, default=0.0001)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--n_epochs", type=int, default=20)
     parser.add_argument("--n_epochs_binary", type=int, default=5)
+    parser.add_argument("--n_epochs_regressor", type=int, default=5)
     parser.add_argument("--load_binary_clf", action="store_true")
+    parser.add_argument("--load_perplexity_reg", action="store_true")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--mode", type=str, default=MODE_EMB2EMB, help="The training mode to use.",
                         choices=[MODE_EMB2EMB, MODE_FINETUNEDECODER, MODE_SEQ2SEQ, MODE_SEQ2SEQFREEZE])
@@ -73,7 +81,7 @@ def get_train_parser():
     parser.add_argument("--meanoffsetvector_factor", type=float,
                         default=2., help="Initialization for MeanOffsetVector factor.")
     parser.add_argument("--loss", type=str, default='cosine',
-                        help="loss", choices=["mse", "cosine", "ce", "fliploss"])
+                        help="loss", choices=["mse", "cosine", "ce", "fliploss", "summaryloss"])
     parser.add_argument("--baseloss", type=str, default='cosine', help="loss",
                         choices=["mse", "cosine"])
     parser.add_argument("--lambda_clfloss", type=float, default=0.5,
@@ -191,6 +199,18 @@ def get_lossfn(params, encoder, data):
         bclf = train_binary_classifier(data['Sx'], data['Sy'], encoder, params)
         params.latent_binary_classifier = bclf
         return FlipLoss(baseloss, bclf,
+                        lambda_clfloss=params.lambda_clfloss)
+    elif params.loss == "summaryloss":
+        if params.baseloss == "cosine":
+            baseloss = CosineLoss()
+        elif params.baseloss == "mse":
+            baseloss = MSELoss()
+        else:
+            raise ValueError("Unknown base loss {params.baseloss}.")
+
+        pxty_reg = train_perplexity_regressor(data['Sx'], data['Sy'], encoder, params)
+        params.latent_perplexity_regressor = pxty_reg
+        return SummaryLoss(baseloss, pxty_reg,
                         lambda_clfloss=params.lambda_clfloss)
 
 
