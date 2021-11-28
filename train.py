@@ -45,7 +45,7 @@ def get_train_parser():
     parser.add_argument("--binary_classifier_path", type=str, default=None,
                         help="Path to the BERT SequenceClassification model and it's tokenizer.")
     parser.add_argument("--perplexity_regressor_path", type=str, default=None,
-                        help="Path to the Perplexity Regressor Model model and it's tokenizer.")
+                        help="Path to the Perplexity Regressor Model")
     parser.add_argument("--output_file", type=str, default='output.csv',
                         help="Output file for csv to store results.")
     parser.add_argument("--load_emb2emb_path", type=str, default=None,
@@ -86,6 +86,8 @@ def get_train_parser():
                         choices=["mse", "cosine"])
     parser.add_argument("--lambda_clfloss", type=float, default=0.5,
                         help="Weight of the clf loss in comparison to the baseloss. Specify between 0 and 1.")
+    parser.add_argument("--lambda_regloss", type=float, default=0.5,
+                        help="Weight of the regression loss in comparison to the baseloss. Specify between 0 and 1.")
     parser.add_argument("--n_layers", type=int, default=1,
                         help="Number of layers to use in the Emb2Emb model.")
     parser.add_argument("--hidden_layer_size", type=int, default=1024,
@@ -209,7 +211,7 @@ def get_lossfn(params, encoder, data):
 
         pxty_reg = train_perplexity_regressor(data['Sx'], encoder, params)
         params.latent_perplexity_regressor = pxty_reg
-        return SummaryLoss(baseloss, pxty_reg, lambda_clfloss=params.lambda_clfloss)
+        return SummaryLoss(baseloss, pxty_reg, lambda_regloss=params.lambda_regloss)
 
 
 def get_mode(params):
