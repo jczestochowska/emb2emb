@@ -1,12 +1,14 @@
 """
 Module to train mapping and the baseline model.
 """
+from re import A
 import torch
 from torch import nn
 from random import choices
 from .fgim import fast_gradient_iterative_modification
 import time
 from emb2emb.fgim import make_binary_classification_loss
+from additive_noise import additive_noise
 
 MODE_EMB2EMB = "mapping"
 MODE_SEQ2SEQ = "seq2seq"
@@ -258,11 +260,22 @@ class Emb2Emb(nn.Module):
 
         return loss, task_loss, critic_loss, train_critic_loss
 
-    def compute_emb2emb(self, Sx_batch):
+    def compute_emb2emb(self, Sx_batch, next_x_batch):
         # encode input
-        print(Sx_batch)
+        sent_batch =Sx_batch
+        indexed = [self.encoder.model.tokenizer.encode(
+            "<SOS>" + s + "<EOS>").ids for s in Sx_batch]
+
+        lengths = [len(i) for i in indexed]
+        Sx_noised = additive_noise(
+                sent_batch=sent_batch,
+                lengths=lengths,
+                next_batch=next_x_batch,
+            )
+        # print('no noise', Sx_batch[0])
+        # print('big noise', Sx_noised[0])
         noise = None # TODO
-        X_embeddings = self._encode(Sx_batch + noise)
+        X_embeddings = self._encode(Sx_noised)
 
         # mapping step
         if not self.training:  # measure the time it takes to run through mapping, but only at inference time
@@ -291,7 +304,7 @@ class Emb2Emb(nn.Module):
             return self._adversarial_training(loss, output_embeddings, real_data)
         return loss
 
-    def forward(self, Sx_batch, Sy_batch):
+    def forward(self, Sx_batch, Sy_batch, next_x_batch):
         """
         Propagates through the mapping framework. Takes as input two lists of
         texts corresponding to the input and outputs. Returns loss (single scalar)
@@ -301,7 +314,7 @@ class Emb2Emb(nn.Module):
         if not self.training:
             s_time = time.time()
 
-        output_embeddings, X_embeddings = self.compute_emb2emb(Sx_batch)
+        output_embeddings, X_embeddings = self.compute_emb2emb(Sx_batch, next_x_batch)
 
         if self.training:
             # compute loss depending on the mode

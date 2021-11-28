@@ -12,7 +12,7 @@ import usc_dae_utils.operations as operations
 
 def additive_noise(sent_batch,
                    lengths,
-                   corpus,
+                   next_batch,
                    ae_add_noise_perc_per_sent_low = 0.2,
                    ae_add_noise_perc_per_sent_high = 0.5,
                    ae_add_noise_num_sent = 2,
@@ -41,7 +41,7 @@ def additive_noise(sent_batch,
         add_lengths = np.round(
             np.random.uniform(min_add_lengths, max_add_lengths)
         ).astype(int)
-        next_batch = operations.shuffle(corpus.next_batch(batch_size))
+        next_batch = operations.shuffle(next_batch)
         for r_i, new_sent in enumerate(next_batch):
             addition = shuffler_func(new_sent.split())[:add_lengths[r_i]]
             split_sent_batch[r_i] += addition

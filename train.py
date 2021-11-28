@@ -355,6 +355,11 @@ def train(params):
             Sx_batch = Sx[stidx:stidx + params.batch_size]
             Sy_batch = Sy[stidx:stidx + params.batch_size]
 
+            # prepare next x_batch for additive noise
+            next_stidx = stidx + params.batch_size
+            next_stidx = next_stidx if next_stidx < len(Sx) else 0
+            next_x_batch = Sx[next_stidx:next_stidx + params.batch_size]
+
             k = len(Sx_batch)  # actual batch size
 
             with torch.autograd.set_detect_anomaly(True):
@@ -363,13 +368,13 @@ def train(params):
 
                     # forward pass
                     loss, task_loss, critic_loss, train_critic_loss = model(
-                        Sx_batch, Sy_batch)
+                        Sx_batch, Sy_batch, next_x_batch)
                     all_costs.append(
                         [loss.item(), task_loss.item(), critic_loss.item(), train_critic_loss.item()])
                     critic_losses.append(critic_loss.item())
 
                 else:
-                    loss = model(Sx_batch, Sy_batch)
+                    loss = model(Sx_batch, Sy_batch, next_x_batch)
 
                     # loss
                     all_costs.append(loss.item())
@@ -456,10 +461,14 @@ def train(params):
                 # prepare batch
                 Sx_batch = Sx[stidx:stidx + params.batch_size]
                 Sy_batch = Sy[stidx:stidx + params.batch_size]
+                # prepare next x_batch for additive noise
+                next_stidx = stidx + params.batch_size
+                next_stidx = next_stidx if next_stidx < len(Sx) else 0
+                next_x_batch = Sx[next_stidx:next_stidx + params.batch_size]
 
                 # model forward
                 with torch.no_grad():
-                    outputs = model(Sx_batch, Sy_batch)
+                    outputs = model(Sx_batch, Sy_batch, next_x_batch)
 
                 if params.print_outputs:
                     for i in range(len(Sx_batch[:5])):
