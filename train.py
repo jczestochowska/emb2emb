@@ -194,24 +194,22 @@ def get_lossfn(params, encoder, data):
         elif params.baseloss == "mse":
             baseloss = MSELoss()
         else:
-            raise ValueError("Unknown base loss {params.baseloss}.")
+            raise ValueError(f"Unknown base loss {params.baseloss}.")
 
         bclf = train_binary_classifier(data['Sx'], data['Sy'], encoder, params)
         params.latent_binary_classifier = bclf
-        return FlipLoss(baseloss, bclf,
-                        lambda_clfloss=params.lambda_clfloss)
+        return FlipLoss(baseloss, bclf, lambda_clfloss=params.lambda_clfloss)
     elif params.loss == "summaryloss":
         if params.baseloss == "cosine":
             baseloss = CosineLoss()
         elif params.baseloss == "mse":
             baseloss = MSELoss()
         else:
-            raise ValueError("Unknown base loss {params.baseloss}.")
+            raise ValueError(f"Unknown base loss {params.baseloss}.")
 
-        pxty_reg = train_perplexity_regressor(data['Sx'], data['Sy'], encoder, params)
+        pxty_reg = train_perplexity_regressor(data['Sx'], encoder, params)
         params.latent_perplexity_regressor = pxty_reg
-        return SummaryLoss(baseloss, pxty_reg,
-                        lambda_clfloss=params.lambda_clfloss)
+        return SummaryLoss(baseloss, pxty_reg, lambda_clfloss=params.lambda_clfloss)
 
 
 def get_mode(params):

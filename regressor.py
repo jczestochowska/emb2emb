@@ -39,22 +39,17 @@ def freeze(m):
         p.requires_grad = False
 
 
-def train_perplexity_regressor(true_inputs, false_inputs, encoder, params, num_val_samples=1000):
+def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
 
     outputmodelname = params.outputmodelname + "_perplexity_regressor"
     if params.load_perplexity_reg:
         perplexity_regressor = PerplexityRegressor(
-            params.embedding_dim, 512, 0., 0.).to(encoder.device)
+            params.embedding_dim, params.embedding_dim // 2, 0., 0.).to(encoder.device)
         checkpoint = torch.load(os.path.join(params.outputdir, outputmodelname),
                                 map_location=params.device)
         perplexity_regressor.load_state_dict(checkpoint["model_state_dict"])
         return perplexity_regressor
 
-    inputs = true_inputs + false_inputs
-
-    # get validation set
-    inputs = inputs[:20]
-    num_val_samples = 5
     indices = list(range(len(inputs)))
     inputs = np.array(inputs)
 
@@ -67,6 +62,7 @@ def train_perplexity_regressor(true_inputs, false_inputs, encoder, params, num_v
         targets.append(perplexity)
     targets = np.array(targets)
 
+    # get validation set
     shuffle(indices)
     val_inputs = inputs[indices[-num_val_samples:]]
     val_targets = targets[indices[-num_val_samples:]]
@@ -75,9 +71,9 @@ def train_perplexity_regressor(true_inputs, false_inputs, encoder, params, num_v
     indices = list(range(len(inputs)))
 
     perplexity_regressor = PerplexityRegressor(params.embedding_dim,
-                                            512,
-                                            params.dropout_binary,
-                                            params.gaussian_noise_binary).to(encoder.device)
+                                               params.embedding_dim // 2,
+                                               params.dropout_binary,
+                                               params.gaussian_noise_binary).to(encoder.device)
     opt = torch.optim.Adam(perplexity_regressor.parameters(), lr=params.lr_pxtyreg)
     freeze(encoder)
     encoder.eval()
@@ -119,13 +115,12 @@ def train_perplexity_regressor(true_inputs, false_inputs, encoder, params, num_v
             if (idx / bsize) % params.log_freq == 0:
                 avg_loss = np.array(losses[-params.log_freq:]).mean()
                 print("Perplexity regression step {}<->{}: loss {} ; train mse: {}, val mse: {}".format(e,
-                                                                                                  idx,
-                                                                                                  avg_loss,
-                                                                                                  error /
-                                                                                                  float(
-                                                                                                      params.log_freq * bsize),
-                                                                                                  best_mse))
-                correct = 0.
+                                                                                                        idx,
+                                                                                                        avg_loss,
+                                                                                                        error /
+                                                                                                        float(
+                                                                                                            params.log_freq * bsize),
+                                                                                                        best_mse))
 
         val_mse = evaluate(val_inputs, val_targets, encoder,
                            perplexity_regressor, params)
