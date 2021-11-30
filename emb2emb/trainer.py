@@ -262,19 +262,14 @@ class Emb2Emb(nn.Module):
 
     def compute_emb2emb(self, Sx_batch, next_x_batch):
         # encode input
-        sent_batch =Sx_batch
-        indexed = [self.encoder.model.tokenizer.encode(
-            "<SOS>" + s + "<EOS>").ids for s in Sx_batch]
+        sent_batch = Sx_batch
 
-        lengths = [len(i) for i in indexed]
         Sx_noised = additive_noise(
                 sent_batch=sent_batch,
-                lengths=lengths,
+                # Tokenize to get lengths
+                lengths=[len(self.encoder.model.tokenizer.encode("<SOS>" + s + "<EOS>").ids) for s in Sx_batch],
                 next_batch=next_x_batch,
             )
-        # print('no noise', Sx_batch[0])
-        # print('big noise', Sx_noised[0])
-        noise = None # TODO
         X_embeddings = self._encode(Sx_noised)
 
         # mapping step

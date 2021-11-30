@@ -1,8 +1,4 @@
 import numpy as np
-
-import torch
-from torch.autograd import Variable
-
 import usc_dae_utils.operations as operations
 
 # Inspired by autoencode.py from usc_dae model
