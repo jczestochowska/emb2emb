@@ -53,6 +53,10 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
     indices = list(range(len(inputs)))
     inputs = np.array(inputs)
 
+    indices = list(range(10))
+    num_val_samples = 3
+    inputs = inputs[:10]
+
     # calculate perplexity
     model = GPT2LMHeadModel.from_pretrained('gpt2').to(params.device)
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')

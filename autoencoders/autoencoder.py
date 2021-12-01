@@ -33,6 +33,7 @@ class AutoEncoder(nn.Module):
         self.decoder = decoder
         self.tokenizer = tokenizer
         self.config = config
+        self.desired_length = config.desired_length
         self.adversarial = config.adversarial
         self.variational = config.variational
         self.denoising = config.denoising
@@ -80,8 +81,7 @@ class AutoEncoder(nn.Module):
             decoded_pred = self.decoder.decode_teacher_forcing(
                 encoded, x, lengths)
         else:
-            decoded_pred = self.decoder.decode(
-                encoded, train=True, actual=x, lengths=lengths)
+            decoded_pred = self.decoder.decode(encoded)
 
         # ret:                      (batch, seq_len, classes)
         if self.variational:
@@ -100,13 +100,13 @@ class AutoEncoder(nn.Module):
         return self.encoder.encode(x, lengths, reparameterize=False)
 
     def decode(self, x, beam_width=1):
-        return self.decoder.decode(x, beam_width=beam_width)
+        return self.decoder.decode(x, beam_width=beam_width, desired_length=self.desired_length)
 
     def decode_training(self, h, actual, lengths):
         """
         Decoding step to be used for downstream training
         """
-        return self.decoder.decode(h, train=True, actual=actual, lengths=lengths)
+        return self.decoder.decode(h)
 
     def loss(self, predictions, embeddings, labels, reduction="mean"):
         # predictions:  (batch, seq_len, classes)

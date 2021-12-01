@@ -104,8 +104,8 @@ class SummaryLoss(nn.Module):
         baseloss = self.baseloss(predicted, true)
 
         predicted_perplexity = self.regressor(predicted)
-        #TODO what's the deisred perplexity?
-        desired_perplexity = None
+        #TODO what's the deisred perplexity? We want high perplexity so we want the error to be low when the perplexity of output is high
+        desired_perplexity = torch.tensor([[1000.0]] * len(predicted_perplexity))
 
         reg_loss = self.mse(predicted_perplexity, desired_perplexity)
         l = self._get_lambda()

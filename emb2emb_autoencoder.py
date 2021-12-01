@@ -133,6 +133,5 @@ class AEDecoder(Decoder):
             return self.model.decode(S_batch, beam_width=15)
 
     def prediction_to_text(self, predictions):
-        predictions = [self.model.tokenizer.decode(
-            p, skip_special_tokens=True) for p in predictions]
+        predictions = [self.model.tokenizer.decode(p, skip_special_tokens=True) for p in predictions]
         return predictions

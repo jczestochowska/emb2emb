@@ -60,13 +60,13 @@ class RNNDecoder(Decoder):
         elif self.type == "GRU":
             return x.repeat(self.layers, 1, 1)
 
-    def decode(self, x, train=False, actual=None, lengths=None, beam_width=1):
+    def decode(self, x, train=False, actual=None, lengths=None, beam_width=1, desired_length=None):
         if self.unit_sphere:
             h = h / h.norm(p=None, dim=-1, keepdim=True)
 
         if not train:
             if beam_width != 1:
-                return self.beam_decode(x, beam_width)
+                return self.beam_decode(x, beam_width, desired_length=desired_length)
             else:
                 return self.greedy_decode(x)
         else:
@@ -233,7 +233,7 @@ class RNNDecoder(Decoder):
         return self.clip_predictions(predictions)
 
     # Only works for LSTM
-    def beam_decode(self, x, beam_width=10):
+    def beam_decode(self, x, beam_width=10, desired_length=None):
         # x = (batch, hidden_size)
         # hidden_lstm = (layers, batch, hidden)
         h = self.init_hidden(x)
@@ -314,7 +314,7 @@ class RNNDecoder(Decoder):
                     beam_index = index // self.vocab_size
                     word_index = index % self.vocab_size
                     prev_beam = incomplete[batch][beam_index]
-                    if word_index == self.eos_idx:
+                    if prev_beam.length == desired_length or word_index == self.eos_idx:
                         # we hit the end of the sequence! Therefore, this element
                         # of the batch is now complete.
 

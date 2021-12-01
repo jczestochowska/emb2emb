@@ -143,8 +143,7 @@ def evaluate_sentence(model, data, device, tokenizer):
         for data_b, lens_b in data:
             X, X_lens = prepare_batch(data_b[:1], lens_b[:1], device)
             encoded = model.encode(X, X_lens)
-            greedy, beam = model.decode(
-                encoded), model.decode(encoded, beam_width=10)
+            greedy, beam = model.decode(encoded), model.decode(encoded, beam_width=10)
             return {"original": tokenizer.decode(X[0].tolist()),
                     "greedy": tokenizer.decode(greedy[0]),
                     "beam": tokenizer.decode(beam[0])}
