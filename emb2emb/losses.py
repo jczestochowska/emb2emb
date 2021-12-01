@@ -72,9 +72,8 @@ class FlipLoss(nn.Module):
 
 
 class SummaryLoss(nn.Module):
-    #TODO adapt
     def __init__(self, baseloss, regressor, lambda_regloss=0.5, increase_until=10000, *args):
-        super(SummaryLoss, self).__init__(*args)
+        super(SummaryLoss, self).__init__()
         self.baseloss = baseloss
         self.regressor = regressor
         self.mse = MSELoss()
@@ -104,8 +103,7 @@ class SummaryLoss(nn.Module):
         baseloss = self.baseloss(predicted, true)
 
         predicted_perplexity = self.regressor(predicted)
-        #TODO what's the deisred perplexity? We want high perplexity so we want the error to be low when the perplexity of output is high
-        desired_perplexity = torch.tensor([[1000.0]] * len(predicted_perplexity))
+        desired_perplexity = torch.ones(size=(len(predicted_perplexity), 1))
 
         reg_loss = self.mse(predicted_perplexity, desired_perplexity)
         l = self._get_lambda()

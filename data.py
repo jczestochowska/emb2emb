@@ -58,17 +58,10 @@ def get_data(params):
         # load the perplexity regressor
         if params.perplexity_regressor_path == "no_eval":
             params.perplexity_regressor_path = -1  # do not eval binary accuracy
-        #TODO load a pretrained model
-        # elif params.perplexity_regressor_path is not None:
-        #     params.binary_tokenizer = AutoTokenizer.from_pretrained(
-        #         params.perplexity_regressor_path)
-        #     params.binary_classifier = AutoModelForSequenceClassification.from_pretrained(
-        #         params.perplexity_regressor_path)
         else:
             params.perplexity_regressor_path = None
         params.current_epoch = 0
-        # TODOJusty
-        return _get_data_pairs(params), evaluate_wiki
+        return _get_data_pairs(params), evaluate_gigaword
     else:
         raise ValueError("Don't know dataset " + str(params.dataset_path))
 
@@ -261,6 +254,10 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
             input_sentences[i], reference_sentences[i][0], pred_outputs[i])
 
     return pred_outputs
+
+
+def evaluate_gigaword(model, mode='valid', params=None):
+    pass
 
 
 def evaluate_wiki(model, mode="valid", params=None):

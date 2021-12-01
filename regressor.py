@@ -1,13 +1,15 @@
-import sys
-
 from torch import nn
 import torch
 from random import shuffle
-from torch.nn.modules.loss import BCEWithLogitsLoss, MSELoss
+from torch.nn.modules.loss import MSELoss
 import numpy as np
 import os
 
+from tqdm import tqdm
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+MAX_PERPLEXITY = 4.493964 * 10e6
+MIN_PERPLEXITY = 4.344099
 
 
 class PerplexityRegressor(nn.Module):
@@ -17,11 +19,14 @@ class PerplexityRegressor(nn.Module):
     def __init__(self, input_size, hidden_size, dropout=0., gaussian_noise_std=0.):
         super(PerplexityRegressor, self).__init__()
 
-        self.classifier = nn.Sequential(nn.Dropout(dropout),
-                                        nn.Linear(input_size, hidden_size),
-                                        nn.ReLU(),
-                                        nn.Dropout(dropout),
-                                        nn.Linear(hidden_size, 1))
+        self.regressor = nn.Sequential(nn.Dropout(dropout),
+                                       nn.Linear(input_size, hidden_size),
+                                       nn.ReLU(),
+                                       nn.Dropout(dropout),
+                                       nn.Linear(hidden_size, hidden_size // 2),
+                                       nn.ReLU(),
+                                       nn.Dropout(dropout),
+                                       nn.Linear(hidden_size // 2, 1))
 
         self.gaussian_noise_std = gaussian_noise_std
 
@@ -31,7 +36,7 @@ class PerplexityRegressor(nn.Module):
             inputs = inputs + \
                 torch.randn_like(inputs) * self.gaussian_noise_std
 
-        return self.classifier(inputs)
+        return self.regressor(inputs)
 
 
 def freeze(m):
@@ -41,7 +46,8 @@ def freeze(m):
 
 def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
 
-    outputmodelname = params.outputmodelname + "_perplexity_regressor"
+    outputmodelname = params.outputmodelname.split(".")
+    outputmodelname = outputmodelname[0] + "_perplexity_regressor." + outputmodelname[1]
     if params.load_perplexity_reg:
         perplexity_regressor = PerplexityRegressor(
             params.embedding_dim, params.embedding_dim // 2, 0., 0.).to(encoder.device)
@@ -53,18 +59,19 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
     indices = list(range(len(inputs)))
     inputs = np.array(inputs)
 
-    indices = list(range(10))
-    num_val_samples = 3
-    inputs = inputs[:10]
-
     # calculate perplexity
     model = GPT2LMHeadModel.from_pretrained('gpt2').to(params.device)
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     targets = []
-    for input in inputs:
-        perplexity = get_perplexity(input, model, tokenizer, params.device)
-        targets.append(perplexity)
+    for input_ in tqdm(inputs):
+        perplexity = get_perplexity(input_, model, tokenizer, params.device)
+        perplexity_scaled = (perplexity - MIN_PERPLEXITY) / (MAX_PERPLEXITY - MIN_PERPLEXITY)
+        targets.append(perplexity_scaled)
     targets = np.array(targets)
+
+    import pickle
+    with open("/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/perplexity/perplexities_normalized.pkl", 'wb') as f:
+        pickle.dump(targets, f)
 
     # get validation set
     shuffle(indices)
