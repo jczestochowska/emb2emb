@@ -70,7 +70,7 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
     targets = np.array(targets)
 
     import pickle
-    with open("/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/perplexity/perplexities_normalized.pkl", 'wb') as f:
+    with open("/home/czestoch/workspace/emb2emb/data/perplexity/perplexities_normalized.pkl", 'wb') as f:
         pickle.dump(targets, f)
 
     # get validation set
@@ -138,6 +138,7 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
         if val_mse > best_mse:
             best_mse = val_mse
             save_reg()
+        save_reg()
         print("Loss in epoch {}: {}".format(e, np.array(losses).mean()))
         error = 0.
     return perplexity_regressor

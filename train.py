@@ -3,6 +3,7 @@ import sys
 import time
 import argparse
 import random
+import json
 
 import numpy as np
 
@@ -211,7 +212,7 @@ def get_lossfn(params, encoder, data):
 
         pxty_reg = train_perplexity_regressor(data['Sx'], encoder, params)
         params.latent_perplexity_regressor = pxty_reg
-        return SummaryLoss(baseloss, pxty_reg, lambda_regloss=params.lambda_regloss)
+        return SummaryLoss(baseloss, pxty_reg, lambda_regloss=params.lambda_regloss, device=params.device)
 
 
 def get_mode(params):
@@ -264,7 +265,8 @@ def configure_fgim(params, emb2emb):
 
 
 def train(params):
-
+    with open(os.path.join(params.outputdir, "phi_config.json"), "w") as f:
+        json.dump(vars(params), f)
     # set gpu device
     device = torch.device(params.device)
     print("Using device {}".format(str(device)))
@@ -275,7 +277,8 @@ def train(params):
     print('\ntogrep : {0}\n'.format(sys.argv[1:]))
     print(params)
 
-    outputmodelname = params.outputmodelname + str(time.time())
+    outputmodelname = params.outputmodelname.split(".")
+    outputmodelname = outputmodelname[0] + str(time.time()).split(".")[0] + "." + outputmodelname[1]
     # save mapping model path for later use
     params.emb2emb_outputmodelname = outputmodelname
     """
@@ -538,6 +541,9 @@ def train(params):
         results["dev"] = final_val_score
     final_test_score = evaluate(0, 'test', True)
     results["test"] = final_test_score
+    outputmodelname = outputmodelname.split(".")
+    checkpoint = {"model_state_dict": model.state_dict()}
+    torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname[0] + "phi." + outputmodelname[1]))
     return results
 
 

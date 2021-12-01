@@ -72,8 +72,10 @@ class FlipLoss(nn.Module):
 
 
 class SummaryLoss(nn.Module):
-    def __init__(self, baseloss, regressor, lambda_regloss=0.5, increase_until=10000, *args):
+    def __init__(self, baseloss, regressor, device, lambda_regloss=0.5, increase_until=10000, *args):
         super(SummaryLoss, self).__init__()
+        print(device)
+        self.device = device
         self.baseloss = baseloss
         self.regressor = regressor
         self.mse = MSELoss()
@@ -103,7 +105,7 @@ class SummaryLoss(nn.Module):
         baseloss = self.baseloss(predicted, true)
 
         predicted_perplexity = self.regressor(predicted)
-        desired_perplexity = torch.ones(size=(len(predicted_perplexity), 1))
+        desired_perplexity = torch.ones(size=(len(predicted_perplexity), 1)).to(self.device)
 
         reg_loss = self.mse(predicted_perplexity, desired_perplexity)
         l = self._get_lambda()
