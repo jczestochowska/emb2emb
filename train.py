@@ -125,6 +125,10 @@ def get_train_parser():
                         help="Whether to compute self-bleu scores on WikiLarge.")
     parser.add_argument("--invert_style", action="store_true",
                         help="Whether to invert the style transfer task (Yelp).")
+
+
+    parser.add_argument("--emb2emb_additive_noise", type=bool, default=True,
+                        help="Should we add additive noise when training phi (used for summarization training)")
     return parser
 
 
@@ -298,7 +302,8 @@ def train(params):
                         params.real_data_path),
                     fast_gradient_iterative_modification=params.fast_gradient_iterative_modification,
                     fgim_decay=params.fgim_decay,
-                    fgim_start_at_y=params.fgim_start_at_y
+                    fgim_start_at_y=params.fgim_start_at_y,
+                    emb2emb_additive_noise=params.emb2emb_additive_noise
                     )
 
     if params.fast_gradient_iterative_modification:

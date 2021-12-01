@@ -94,7 +94,8 @@ class Emb2Emb(nn.Module):
                  fgim_loss_f=None,
                  fgim_criterion_f=None,
                  fgim_start_at_y=False,
-                 fgim_max_steps=30):
+                 fgim_max_steps=30,
+                 emb2emb_additive_noise=True):
         """Constructor method"""
         super(Emb2Emb, self).__init__()
         self.encoder = encoder
