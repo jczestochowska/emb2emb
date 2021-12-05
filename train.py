@@ -362,6 +362,8 @@ def train(params):
         indices = list(range(len(train["Sx"])))
         random.shuffle(indices)
 
+        indices = [1,2,3,4,5]
+
         Sx = [train['Sx'][i] for i in indices]
         Sy = [train['Sy'][i] for i in indices]
 
