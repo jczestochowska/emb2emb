@@ -59,19 +59,21 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
     indices = list(range(len(inputs)))
     inputs = np.array(inputs)
 
-    # calculate perplexity
-    model = GPT2LMHeadModel.from_pretrained('gpt2').to(params.device)
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-    targets = []
-    for input_ in tqdm(inputs):
-        perplexity = get_perplexity(input_, model, tokenizer, params.device)
-        perplexity_scaled = (perplexity - MIN_PERPLEXITY) / (MAX_PERPLEXITY - MIN_PERPLEXITY)
-        targets.append(perplexity_scaled)
-    targets = np.array(targets)
+    # # calculate perplexity
+    # model = GPT2LMHeadModel.from_pretrained('gpt2').to(params.device)
+    # tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    # targets = []
+    # for input_ in tqdm(inputs):
+    #     perplexity = get_perplexity(input_, model, tokenizer, params.device)
+    #     perplexity_scaled = (perplexity - MIN_PERPLEXITY) / (MAX_PERPLEXITY - MIN_PERPLEXITY)
+    #     targets.append(perplexity_scaled)
+    # targets = np.array(targets)
 
     import pickle
-    with open("/home/czestoch/workspace/emb2emb/data/perplexity/perplexities_normalized.pkl", 'wb') as f:
-        pickle.dump(targets, f)
+    with open("/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/perplexity/perplexities_log.pkl", 'rb') as f:
+        # pickle.dump(targets, f)
+        targets = pickle.load(f)
+
 
     # get validation set
     shuffle(indices)
@@ -138,7 +140,6 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
         if val_mse > best_mse:
             best_mse = val_mse
             save_reg()
-        save_reg()
         print("Loss in epoch {}: {}".format(e, np.array(losses).mean()))
         error = 0.
     return perplexity_regressor

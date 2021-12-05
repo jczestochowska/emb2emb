@@ -4,6 +4,7 @@ from random import randint
 from os.path import join
 from sari.SARI import SARIsent
 import torch
+from rouge import Rouge
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import numpy as np
@@ -206,7 +207,8 @@ def bleu_tokenize(s):
     return s.split()
 
 
-def evaluate_bleu(model, input_sentences, reference_sentences, batch_size, max_prints, return_predictions=False, predictions=None):
+def evaluate_bleu(model, input_sentences, reference_sentences, batch_size, max_prints, return_predictions=False,
+                  predictions=None):
     model.eval()
 
     if predictions is None:
@@ -237,7 +239,6 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
     model.eval()
 
     pred_outputs = []
-    i = 1
     for i, stidx in enumerate(range(0, len(input_sentences), batch_size)):
         if i % 10 == 0:
             print("Eval progress:", float(stidx) / len(input_sentences))
@@ -256,12 +257,48 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
     return pred_outputs
 
 
-def evaluate_gigaword(model, mode='valid', params=None):
-    pass
+def evaluate_gigaword(model, mode='valid', params=None, predictions=None):
+    if mode == "valid":
+        # inputs = "./data/gigaword/s1.dev"
+        # ref = "./data/gigaword/s2.dev"
+        inputs = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s1.dev"
+        ref = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s2.dev"
+    elif mode == "test":
+        # inputs = "./data/gigaword/s1.test"
+        # ref = "./data/gigaword/s2.test"
+        inputs = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s1.test"
+        ref = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s2.test"
+
+    inputs = read_file(inputs, params)
+    refs = read_file(ref, params)
+
+    model.eval()
+
+    pred_outputs = []
+    for i, stidx in enumerate(range(0, len(inputs), params.batch_size)):
+        if i % 10 == 0:
+            print("Eval progress:", float(stidx) / len(inputs))
+
+        # prepare batch
+        Sx_batch = inputs[stidx:stidx + params.batch_size]
+        Sy_batch = refs[stidx:stidx + params.batch_size]
+        # model forward
+        with torch.no_grad():
+            pred_outputs.extend(model(Sx_batch, Sy_batch))
+
+    for i in range(min(len(inputs), params.max_prints)):
+        pretty_print_prediction(
+            inputs[i], refs[i], pred_outputs[i])
+
+    return calculate_rouge_metrics(pred_outputs, refs)
+
+
+def calculate_rouge_metrics(model_outputs, reference, metrics=["rouge-1", "rouge-2", "rouge-3", "rouge-l"], avg=True):
+    rouge = Rouge(metrics=metrics)
+    return rouge.get_scores(hyps=model_outputs, refs=reference, avg=avg)
 
 
 def evaluate_wiki(model, mode="valid", params=None):
-
     sari, predictions = evaluate_sari(model, mode, params)
     b_acc = eval_binary_accuracy(model, predictions, mode, params)
 
@@ -270,7 +307,8 @@ def evaluate_wiki(model, mode="valid", params=None):
                          max_prints=0, return_predictions=False, predictions=predictions)
     if params.eval_self_bleu:
         self_bleu = evaluate_bleu(model, norm_sentences, [
-                                  [n] for n in norm_sentences], params.batch_size, max_prints=0, return_predictions=False, predictions=predictions)
+            [n] for n in norm_sentences], params.batch_size, max_prints=0, return_predictions=False,
+                                  predictions=predictions)
     else:
         self_bleu = -1.
 
