@@ -57,7 +57,7 @@ def get_train_parser():
     parser.add_argument("--validation_frequency", type=int, default=-1)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--lr_bclf", type=float, default=0.0001)
-    parser.add_argument("--lr_pxtyreg", type=float, default=0.0001)
+    parser.add_argument("--lr_pxtyreg", type=float, default=0.001)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--n_epochs", type=int, default=20)
     parser.add_argument("--n_epochs_binary", type=int, default=5)
@@ -364,8 +364,6 @@ def train(params):
         # shuffle the data
         indices = list(range(len(train["Sx"])))
         random.shuffle(indices)
-
-        indices = [1,2,3,4,5]
 
         Sx = [train['Sx'][i] for i in indices]
         Sy = [train['Sy'][i] for i in indices]

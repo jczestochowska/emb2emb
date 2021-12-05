@@ -74,14 +74,12 @@ class FlipLoss(nn.Module):
 class SummaryLoss(nn.Module):
     def __init__(self, baseloss, regressor, device, lambda_regloss=0.5, increase_until=10000, *args):
         super(SummaryLoss, self).__init__()
-        print(device)
         self.device = device
         self.baseloss = baseloss
         self.regressor = regressor
         self.mse = MSELoss()
         self.lambda_regloss = lambda_regloss
         self.increase_until = increase_until
-        #
         self.i = 0
 
         for p in self.regressor.parameters():

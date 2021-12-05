@@ -1,15 +1,12 @@
 from torch import nn
 import torch
 from random import shuffle
-from torch.nn.modules.loss import MSELoss
+from torch.nn.modules.loss import L1Loss
 import numpy as np
 import os
 
 from tqdm import tqdm
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
-
-MAX_PERPLEXITY = 4.493964 * 10e6
-MIN_PERPLEXITY = 4.344099
 
 
 class PerplexityRegressor(nn.Module):
@@ -22,11 +19,11 @@ class PerplexityRegressor(nn.Module):
         self.regressor = nn.Sequential(nn.Dropout(dropout),
                                        nn.Linear(input_size, hidden_size),
                                        nn.ReLU(),
+                                    #    nn.Dropout(dropout),
+                                    #    nn.Linear(hidden_size, hidden_size // 2),
+                                    #    nn.ReLU(),
                                        nn.Dropout(dropout),
-                                       nn.Linear(hidden_size, hidden_size // 2),
-                                       nn.ReLU(),
-                                       nn.Dropout(dropout),
-                                       nn.Linear(hidden_size // 2, 1))
+                                       nn.Linear(hidden_size, 1))
 
         self.gaussian_noise_std = gaussian_noise_std
 
@@ -44,7 +41,7 @@ def freeze(m):
         p.requires_grad = False
 
 
-def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
+def train_perplexity_regressor(inputs, encoder, params):
 
     outputmodelname = params.outputmodelname.split(".")
     outputmodelname = outputmodelname[0] + "_perplexity_regressor." + outputmodelname[1]
@@ -58,20 +55,27 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
 
     indices = list(range(len(inputs)))
     inputs = np.array(inputs)
+    num_val_samples = int(0.3 * len(inputs))
 
     # calculate perplexity
-    model = GPT2LMHeadModel.from_pretrained('gpt2').to(params.device)
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-    targets = []
-    for input_ in tqdm(inputs):
-        perplexity = get_perplexity(input_, model, tokenizer, params.device)
-        perplexity_scaled = (perplexity - MIN_PERPLEXITY) / (MAX_PERPLEXITY - MIN_PERPLEXITY)
-        targets.append(perplexity_scaled)
-    targets = np.array(targets)
+    # model = GPT2LMHeadModel.from_pretrained('gpt2').to(params.device)
+    # tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    # targets = []
+    # for input_ in tqdm(inputs):
+    #     perplexity = get_perplexity(input_, model, tokenizer, params.device)
+    #     # perplexity_scaled = (perplexity - MIN_PERPLEXITY) / (MAX_PERPLEXITY - MIN_PERPLEXITY)
+    #     targets.append(perplexity)
+    # targets = np.array(targets)
 
     import pickle
-    with open("/home/czestoch/workspace/emb2emb/data/perplexity/perplexities_normalized.pkl", 'wb') as f:
-        pickle.dump(targets, f)
+    with open("/home/czestoch/workspace/emb2emb/data/perplexity/perplexities_log.pkl", 'rb') as f:
+        targets = pickle.load(f)
+    # import sys
+    # sys.exit()
+
+    # targets = targets[:10000]
+    # inputs = inputs[:10000]
+    # indices = list(range(len(inputs)))
 
     # get validation set
     shuffle(indices)
@@ -88,13 +92,13 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
     opt = torch.optim.Adam(perplexity_regressor.parameters(), lr=params.lr_pxtyreg)
     freeze(encoder)
     encoder.eval()
-    loss_f = MSELoss()
+    loss_f = L1Loss()
 
     def save_reg():
         checkpoint = {"model_state_dict": perplexity_regressor.state_dict()}
         torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname))
 
-    best_mse = evaluate(val_inputs, val_targets, encoder,
+    best_mae = evaluate(val_inputs, val_targets, encoder,
                         perplexity_regressor, params)
     bsize = params.batch_size
     error = 0.
@@ -116,7 +120,7 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
                 embeddings = encoder(ib)
             preds = perplexity_regressor(embeddings)
             loss = loss_f(preds, tb)
-            error += torch.pow((preds - tb), 2).sum().item()
+            error += torch.abs(preds - tb).sum().item()
 
             opt.zero_grad()
             loss.backward()
@@ -124,22 +128,18 @@ def train_perplexity_regressor(inputs, encoder, params, num_val_samples=1000):
             losses.append(loss.item())
 
             if (idx / bsize) % params.log_freq == 0:
-                avg_loss = np.array(losses[-params.log_freq:]).mean()
-                print("Perplexity regression step {}<->{}: loss {} ; train mse: {}, val mse: {}".format(e,
-                                                                                                        idx,
-                                                                                                        avg_loss,
-                                                                                                        error /
-                                                                                                        float(
-                                                                                                            params.log_freq * bsize),
-                                                                                                        best_mse))
+                avg_loss = np.nanmean(np.array(losses[-params.log_freq:]))
+                print("Perplexity regression step {}<->{}: loss/train mae: {} ; val mae: {}".format(e,
+                                                                                                    idx,
+                                                                                                    avg_loss,
+                                                                                                    best_mae))
 
-        val_mse = evaluate(val_inputs, val_targets, encoder,
+        val_mae = evaluate(val_inputs, val_targets, encoder,
                            perplexity_regressor, params)
-        if val_mse > best_mse:
-            best_mse = val_mse
+        if val_mae < best_mae:
+            best_mae = val_mae
             save_reg()
-        save_reg()
-        print("Loss in epoch {}: {}".format(e, np.array(losses).mean()))
+        print("Loss in epoch {}: {}".format(e, np.nanmean(np.array(losses))))
         error = 0.
     return perplexity_regressor
 
@@ -149,7 +149,7 @@ def evaluate(val_inputs, val_targets, encoder, perplexity_regressor, params):
     t = val_targets
     bsize = params.batch_size
 
-    error = 0.
+    errors = []
     perplexity_regressor.eval()
 
     for idx in range(0, len(inputs), bsize):
@@ -160,9 +160,8 @@ def evaluate(val_inputs, val_targets, encoder, perplexity_regressor, params):
         with torch.no_grad():
             embeddings = encoder(ib)
         preds = perplexity_regressor(embeddings)
-
-        error += torch.pow((preds - tb), 2).sum().item()
-    return error / len(inputs)
+        errors.append(torch.abs(preds - tb).sum().item())
+    return np.nanmean(np.array(errors))
 
 
 # Sliding window approach
