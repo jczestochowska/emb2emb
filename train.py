@@ -450,6 +450,13 @@ def train(params):
                 score = tmp_score[0]
                 self_bleu = tmp_score[1]
                 b_acc = tmp_score[2]
+                fscore_rouge_l = None
+            elif type(score) == dict:
+                print(score)
+                fscore_rouge_l = score['rouge-l']['f']
+                score = fscore_rouge_l
+                self_bleu = None
+                b_acc = None
             else:
                 self_bleu = None
                 b_acc = None
@@ -502,6 +509,8 @@ def train(params):
             eval_string = eval_string + " ; b-acc : {}".format(b_acc)
         if self_bleu is not None:
             eval_string = eval_string + " ; self-bleu : {}".format(self_bleu)
+        if fscore_rouge_l is not None:
+            eval_string = eval_string + " ; f score rouge-l : {}".format(fscore_rouge_l)
         print(eval_string)
         return score
 
