@@ -4,7 +4,7 @@ This module contains regression loss functions to be used in conjunction with Em
 
 import torch
 from torch import nn
-from torch.nn import CosineEmbeddingLoss, MSELoss
+from torch.nn import CosineEmbeddingLoss, MSELoss, L1Loss
 from torch.nn.modules.loss import BCELoss
 
 
@@ -77,9 +77,10 @@ class SummaryLoss(nn.Module):
         self.device = device
         self.baseloss = baseloss
         self.regressor = regressor
-        self.mse = MSELoss()
+        self.loss = MSELoss()
         self.lambda_regloss = lambda_regloss
         self.increase_until = increase_until
+        self.max_log_perplexity = 15.31824583227476
         self.i = 0
 
         for p in self.regressor.parameters():
@@ -103,9 +104,10 @@ class SummaryLoss(nn.Module):
         baseloss = self.baseloss(predicted, true)
 
         predicted_perplexity = self.regressor(predicted)
-        desired_perplexity = torch.ones(size=(len(predicted_perplexity), 1)).to(self.device)
+        predicted_perplexity[predicted_perplexity > self.max_log_perplexity] = self.max_log_perplexity
+        desired_perplexity = torch.tensor(len(predicted_perplexity)*[[self.max_log_perplexity]]).to(self.device)
 
-        reg_loss = self.mse(predicted_perplexity, desired_perplexity)
+        reg_loss = self.loss(predicted_perplexity, desired_perplexity)
         l = self._get_lambda()
         reg_loss = l * reg_loss
         baseloss = (1 - l) * baseloss

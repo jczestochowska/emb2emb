@@ -58,9 +58,7 @@ def get_data(params):
         params.run_id = randint(0, 999999999)
         # load the perplexity regressor
         if params.perplexity_regressor_path == "no_eval":
-            params.perplexity_regressor_path = -1  # do not eval binary accuracy
-        else:
-            params.perplexity_regressor_path = None
+            params.perplexity_regressor_path = -1
         params.current_epoch = 0
         return _get_data_pairs(params), evaluate_gigaword
     else:
@@ -257,17 +255,13 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
     return pred_outputs
 
 
-def evaluate_gigaword(model, mode='valid', params=None, predictions=None):
+def evaluate_gigaword(model, mode='valid', params=None):
     if mode == "valid":
         inputs = "./data/gigaword/s1.dev"
         ref = "./data/gigaword/s2.dev"
-        # inputs = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s1.dev"
-        # ref = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s2.dev"
     elif mode == "test":
         inputs = "./data/gigaword/s1.test"
         ref = "./data/gigaword/s2.test"
-        # inputs = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s1.test"
-        # ref = "/home/jczestochowska/workspace/epfl/ma-4/deep_learning_for_nlp/emb2emb/data/gigaword/s2.test"
 
     inputs = read_file(inputs, params)
     refs = read_file(ref, params)
@@ -281,10 +275,10 @@ def evaluate_gigaword(model, mode='valid', params=None, predictions=None):
 
         # prepare batch
         Sx_batch = inputs[stidx:stidx + params.batch_size]
-        Sy_batch = refs[stidx:stidx + params.batch_size]
         # model forward
         with torch.no_grad():
-            pred_outputs.extend(model(Sx_batch, Sy_batch))
+            #TODO this is super slow
+            pred_outputs.extend(model(Sx_batch, Sx_batch))
 
     for i in range(min(len(inputs), params.max_prints)):
         pretty_print_prediction(

@@ -4,7 +4,6 @@ import time
 import argparse
 import random
 import json
-
 import numpy as np
 
 import torch
@@ -265,7 +264,8 @@ def configure_fgim(params, emb2emb):
 
 
 def train(params):
-    with open(os.path.join(params.outputdir, "phi_config.json"), "w") as f:
+    timestamp = str(time.time())
+    with open(os.path.join(params.outputdir, f"phi_config_{timestamp}.json"), "w") as f:
         json.dump(vars(params), f)
     # set gpu device
     device = torch.device(params.device)
@@ -278,7 +278,7 @@ def train(params):
     print(params)
 
     outputmodelname = params.outputmodelname.split(".")
-    outputmodelname = outputmodelname[0] + str(time.time()).split(".")[0] + "." + outputmodelname[1]
+    outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
     # save mapping model path for later use
     params.emb2emb_outputmodelname = outputmodelname
     """
@@ -414,7 +414,7 @@ def train(params):
                     mean_losses = np.reshape(
                         np.array(all_costs).mean(axis=0), (-1))
                     mean_losses = np.round(mean_losses, decimals=5)
-                    log_string = '{0} ; loss {1} ; sentence/s {2} ; t-loss {3} ; c-loss {4} ; tc-loss {5}'
+                    log_string = '{0} ; loss {1} ; sentence/s {2} ; task-loss {3} ; critic-loss {4} ; task-critic-loss {5}'
                     log_string = log_string.format(
                         stidx, mean_losses[0],
                         int(len(all_costs) * params.batch_size /
@@ -423,15 +423,12 @@ def train(params):
 
                 logs.append(log_string)
                 print(logs[-1])
-                # for p in model.mapping.parameters():
-                #    print(p.grad)
-                #    break
                 last_time = time.time()
                 all_costs = []
 
-            if params.validation_frequency > 0 and (batch_counter % params.validation_frequency) == 0:
-                evaluate(epoch, eval_type='valid', final_eval=False)
-                model.train()
+        if params.validation_frequency > 0 and (epoch % params.validation_frequency) == 0:
+            evaluate(epoch, eval_type='valid', final_eval=False)
+            model.train()
 
         params.time_for_epoch = time.time() - start_epoch_time
         return round(np.mean(all_costs), 5)
@@ -504,7 +501,7 @@ def train(params):
             score = 0
 
         eval_string = "Validation-Score in epoch {}/{} : {}; best : {}".format(
-            epoch, batch_counter, score, val_acc_best)
+            epoch, params.n_epochs, score, val_acc_best)
         if b_acc is not None:
             eval_string = eval_string + " ; b-acc : {}".format(b_acc)
         if self_bleu is not None:
@@ -528,8 +525,8 @@ def train(params):
             print('Epoch {0} ; loss {1}'.format(
                 epoch, train_loss))
 
-        if params.validate and params.validation_frequency < 0:
-            evaluate(epoch, 'valid')
+        # if params.validate and params.validation_frequency < 0:
+            # evaluate(epoch, 'valid')
         epoch += 1
 
     # Run best model on test set.
@@ -548,9 +545,9 @@ def train(params):
         results["dev"] = final_val_score
     final_test_score = evaluate(0, 'test', True)
     results["test"] = final_test_score
-    outputmodelname = outputmodelname.split(".")
-    checkpoint = {"model_state_dict": model.state_dict()}
-    torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname[0] + "phi." + outputmodelname[1]))
+    # outputmodelname = outputmodelname.split(".")
+    # checkpoint = {"model_state_dict": model.state_dict()}
+    # torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname[0] + "phi." + outputmodelname[1]))
     return results
 
 

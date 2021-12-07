@@ -48,7 +48,7 @@ def train_perplexity_regressor(inputs, encoder, params):
     if params.load_perplexity_reg:
         perplexity_regressor = PerplexityRegressor(
             params.embedding_dim, params.embedding_dim // 2, 0., 0.).to(encoder.device)
-        checkpoint = torch.load(os.path.join(params.outputdir, outputmodelname),
+        checkpoint = torch.load(params.perplexity_regressor_path,
                                 map_location=params.device)
         perplexity_regressor.load_state_dict(checkpoint["model_state_dict"])
         return perplexity_regressor
