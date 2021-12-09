@@ -55,7 +55,7 @@ def train_perplexity_regressor(inputs, encoder, params):
 
     indices = list(range(len(inputs)))
     inputs = np.array(inputs)
-    num_val_samples = int(0.3 * len(inputs))
+    #num_val_samples = int(0.3 * len(inputs))
 
 
     # # calculate perplexity
@@ -69,13 +69,14 @@ def train_perplexity_regressor(inputs, encoder, params):
     # targets = np.array(targets)
 
     import pickle
-    with open("/home/czestoch/workspace/emb2emb/data/perplexity/perplexities_log.pkl", 'rb') as f:
+    with open("./data/perplexity/perplexities_log.pkl", 'rb') as f:
         targets = pickle.load(f)
     # import sys
     # sys.exit()
 
-    # targets = targets[:10000]
-    # inputs = inputs[:10000]
+    targets = targets[:10000]
+    inputs = inputs[:10000]
+    num_val_samples = 3000
     # indices = list(range(len(inputs)))
 
     # get validation set
