@@ -384,14 +384,14 @@ def train(params):
             # prepare batch
             Sx_batch = Sx[stidx:stidx + params.batch_size]
             Sy_batch = Sy[stidx:stidx + params.batch_size]
+            k = len(Sx_batch)  # actual batch size
 
             # prepare next x_batch for additive noise
-            next_stidx = stidx + params.batch_size
-            # next_stidx = next_stidx if next_stidx < len(Sx) else 0
-            next_stidx = next_stidx if next_stidx + params.batch_size < len(Sx) else 0
-            next_x_batch = Sx[next_stidx:next_stidx + params.batch_size]
-
-            k = len(Sx_batch)  # actual batch size
+            next_stidx = stidx + k
+            next_stidx = next_stidx if (next_stidx) < len(Sx) else 0
+            next_x_batch = Sx[next_stidx:next_stidx + k]
+            # print(next_stidx, len(Sx))
+            print(next_stidx, len(Sx), k)
 
             with torch.autograd.set_detect_anomaly(True):
                 # model forward
