@@ -116,6 +116,7 @@ class Emb2Emb(nn.Module):
         self.total_time_fgim = 0.
         self.total_emb2emb_time = 0.
         self.total_inference_time = 0.
+        self.emb2emb_additive_noise = emb2emb_additive_noise
 
         if mode in [MODE_FINETUNEDECODER, MODE_EMB2EMB, MODE_SEQ2SEQFREEZE]:
             for p in self.encoder.parameters():
@@ -265,13 +266,14 @@ class Emb2Emb(nn.Module):
         # encode input
         sent_batch = Sx_batch
 
-        Sx_noised = additive_noise(
-                sent_batch=sent_batch,
-                # Tokenize to get lengths
-                lengths=[len(self.encoder.model.tokenizer.encode("<SOS>" + s + "<EOS>").ids) for s in Sx_batch],
-                next_batch=next_x_batch,
-            )
-        X_embeddings = self._encode(Sx_noised)
+        if self.emb2emb_additive_noise:
+            Sx_batch = additive_noise(
+                    sent_batch=sent_batch,
+                    # Tokenize to get lengths
+                    lengths=[len(self.encoder.model.tokenizer.encode("<SOS>" + s + "<EOS>").ids) for s in Sx_batch],
+                    next_batch=next_x_batch,
+                )
+        X_embeddings = self._encode(Sx_batch)
 
         # mapping step
         if not self.training:  # measure the time it takes to run through mapping, but only at inference time
