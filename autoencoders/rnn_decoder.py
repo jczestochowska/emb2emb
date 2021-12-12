@@ -311,7 +311,7 @@ class RNNDecoder(Decoder):
                 new_beams = []
 
                 for seq_prob, index in zip(k_seq_probs, k_indices):
-                    beam_index = index // self.vocab_size
+                    beam_index = torch.div(index, self.vocab_size, rounding_mode='floor')
                     word_index = index % self.vocab_size
                     prev_beam = incomplete[batch][beam_index]
                     if prev_beam.length == desired_length or word_index == self.eos_idx:

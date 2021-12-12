@@ -265,8 +265,8 @@ def configure_fgim(params, emb2emb):
 
 def train(params):
     timestamp = str(time.time())
-    with open(os.path.join(params.outputdir, f"phi_config_{timestamp}.json"), "w") as f:
-        json.dump(vars(params), f)
+    # with open(os.path.join(params.outputdir, f"phi_config_{timestamp.split('.')[0]}.json"), "w") as f:
+    #     json.dump(vars(params), f)
     # set gpu device
     device = torch.device(params.device)
     print("Using device {}".format(str(device)))
@@ -277,10 +277,11 @@ def train(params):
     print('\ntogrep : {0}\n'.format(sys.argv[1:]))
     print(params)
 
-    outputmodelname = params.outputmodelname.split(".")
-    outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
+    outputmodelname = params.outputmodelname
+    # .split(".")
+    # outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
     # save mapping model path for later use
-    params.emb2emb_outputmodelname = outputmodelname
+    params.emb2emb_outputmodelname = params.outputmodelname
     """
     SEED
     """
@@ -291,7 +292,7 @@ def train(params):
 
     """
     DATA
-    """
+    """ 
     (train, valid, test), eval_function = get_data(params)
 
     """
@@ -330,7 +331,7 @@ def train(params):
 
     if params.load_emb2emb_path is not None:
         model.load_state_dict(torch.load(
-            params.load_emb2emb_path)['model_state_dict'])
+            params.load_emb2emb_path)['model_state_dict'], strict=False)
 
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
@@ -427,18 +428,20 @@ def train(params):
                 all_costs = []
 
         if params.validation_frequency > 0 and (epoch % params.validation_frequency) == 0:
-            evaluate(epoch, eval_type='valid', final_eval=False)
+            evaluate(epoch, eval_type='valid')
             model.train()
 
         params.time_for_epoch = time.time() - start_epoch_time
         return round(np.mean(all_costs), 5)
 
-    def evaluate(epoch, eval_type='valid', final_eval=False):
+    def evaluate(epoch, eval_type='valid'):
         model.eval()
 
         if eval_function is not None:
-            score = eval_function(
-                model, mode="valid" if not final_eval else "test", params=params)
+            dataset = valid
+            if eval_type == 'test':
+                dataset = test
+            score = eval_function(model, dataset=dataset, params=params)
             print("Total Inference time", model.total_inference_time)
             print("Total Emb2Emb time", model.total_emb2emb_time)
             print("Total FGIM time", model.total_time_fgim)
@@ -450,7 +453,7 @@ def train(params):
                 fscore_rouge_l = None
             elif type(score) == dict:
                 print(score)
-                fscore_rouge_l = score['rouge-l']['f']
+                fscore_rouge_l = score['f']
                 score = fscore_rouge_l
                 self_bleu = None
                 b_acc = None
@@ -540,10 +543,10 @@ def train(params):
             pass
 
     results = {}
-    if params.validate:
-        final_val_score = evaluate(1e6, 'valid', False)
-        results["dev"] = final_val_score
-    final_test_score = evaluate(0, 'test', True)
+    # if params.validate:
+    #     final_val_score = evaluate(1e6, 'valid')
+    #     results["dev"] = final_val_score
+    final_test_score = evaluate(0, 'test')
     results["test"] = final_test_score
     # outputmodelname = outputmodelname.split(".")
     # checkpoint = {"model_state_dict": model.state_dict()}

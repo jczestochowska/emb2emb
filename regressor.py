@@ -142,6 +142,7 @@ def train_perplexity_regressor(inputs, encoder, params):
             save_reg()
         print("Loss in epoch {}: {}".format(e, np.nanmean(np.array(losses))))
         error = 0.
+    sys.exit()
     return perplexity_regressor
 
 

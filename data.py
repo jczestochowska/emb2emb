@@ -8,6 +8,7 @@ from rouge import Rouge
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import numpy as np
+import pandas as pd
 
 
 def read_all(path):
@@ -255,20 +256,14 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
     return pred_outputs
 
 
-def evaluate_gigaword(model, mode='valid', params=None):
-    if mode == "valid":
-        inputs = "./data/gigaword/s1.dev"
-        ref = "./data/gigaword/s2.dev"
-    elif mode == "test":
-        inputs = "./data/gigaword/s1.test"
-        ref = "./data/gigaword/s2.test"
-
-    inputs = read_file(inputs, params)
-    refs = read_file(ref, params)
+def evaluate_gigaword(model, dataset, params=None):
+    inputs = dataset['Sx']
+    refs = dataset['Sy']
 
     model.eval()
 
-    pred_outputs = []
+    pred_outputs = ['' for _ in range(len(inputs))]
+    rouges = []
     for i, stidx in enumerate(range(0, len(inputs), params.batch_size)):
         if i % 10 == 0:
             print("Eval progress:", float(stidx) / len(inputs))
@@ -277,19 +272,25 @@ def evaluate_gigaword(model, mode='valid', params=None):
         Sx_batch = inputs[stidx:stidx + params.batch_size]
         # model forward
         with torch.no_grad():
-            #TODO this is super slow
-            pred_outputs.extend(model(Sx_batch, Sx_batch))
+            pred_outputs = model(Sx_batch, Sx_batch)
+        ground_truth = refs[stidx:stidx + params.batch_size]
+        try:
+            rouges.append(calculate_rouge_metrics(pred_outputs, ground_truth)['rouge-l'])
+        except ValueError as e:
+            print(e)
+            print("======= Exception for batch rouge calculation ========")
+            print(pred_outputs, ground_truth)
+    pred_outputs = pred_outputs[-params.max_prints:]
+    for i in range(params.max_prints, 0, -1):
+        pretty_print_prediction(inputs[-i], refs[-i], pred_outputs[-i])
 
-    for i in range(min(len(inputs), params.max_prints)):
-        pretty_print_prediction(
-            inputs[i], refs[i], pred_outputs[i])
-
-    return calculate_rouge_metrics(pred_outputs, refs)
+    df = pd.DataFrame(rouges)
+    return dict((df.sum() * params.batch_size) / len(inputs))
 
 
 def calculate_rouge_metrics(model_outputs, reference, metrics=["rouge-1", "rouge-2", "rouge-3", "rouge-l"], avg=True):
     rouge = Rouge(metrics=metrics)
-    return rouge.get_scores(hyps=model_outputs, refs=reference, avg=avg)
+    return rouge.get_scores(ignore_empty=True, hyps=model_outputs, refs=reference, avg=avg)
 
 
 def evaluate_wiki(model, mode="valid", params=None):
