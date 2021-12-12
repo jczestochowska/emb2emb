@@ -103,6 +103,8 @@ def get_train_parser():
     parser.add_argument("--fgim_no_stop_criterion", action="store_true")
     parser.add_argument("--fgim_weights", type=float,
                         nargs="+", default=[10e0, 10e1, 10e2, 10e3])
+    parser.add_argument("--emb2emb_additive_noise", action="store_true",
+                        help="Should we add additive noise when training phi (used for summarization training)")
 
     # adversarial reg for mapping
     parser.add_argument("--adversarial_regularization", action="store_true",
@@ -136,9 +138,6 @@ def get_train_parser():
     parser.add_argument("--invert_style", action="store_true",
                         help="Whether to invert the style transfer task (Yelp).")
 
-
-    parser.add_argument("--emb2emb_additive_noise", type=bool, default=True,
-                        help="Should we add additive noise when training phi (used for summarization training)")
     return parser
 
 
@@ -269,8 +268,8 @@ def configure_fgim(params, emb2emb):
 
 def train(params):
     timestamp = str(time.time())
-    # with open(os.path.join(params.outputdir, f"phi_config_{timestamp.split('.')[0]}.json"), "w") as f:
-    #     json.dump(vars(params), f)
+    with open(os.path.join(params.outputdir, f"phi_config_{timestamp.split('.')[0]}.json"), "w") as f:
+        json.dump(vars(params), f)
     # set gpu device
     device = torch.device(params.device)
     print("Using device {}".format(str(device)))
@@ -282,8 +281,10 @@ def train(params):
     print(params)
 
     outputmodelname = params.outputmodelname
-    # .split(".")
-    # outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
+    if params.emb2emb_additive_noise:
+        outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "_with_noise_" + "." + outputmodelname[1]
+
+    outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
     # save mapping model path for later use
     params.emb2emb_outputmodelname = params.outputmodelname
     """

@@ -1,14 +1,14 @@
 """
 Module to train mapping and the baseline model.
 """
-from re import A
+import time
+from random import choices
+
 import torch
 from torch import nn
-from random import choices
-from .fgim import fast_gradient_iterative_modification
-import time
-from emb2emb.fgim import make_binary_classification_loss
+
 from additive_noise import additive_noise
+from .fgim import fast_gradient_iterative_modification
 
 MODE_EMB2EMB = "mapping"
 MODE_SEQ2SEQ = "seq2seq"
@@ -95,7 +95,7 @@ class Emb2Emb(nn.Module):
                  fgim_criterion_f=None,
                  fgim_start_at_y=False,
                  fgim_max_steps=30,
-                 emb2emb_additive_noise=True):
+                 emb2emb_additive_noise=False):
         """Constructor method"""
         super(Emb2Emb, self).__init__()
         self.encoder = encoder
