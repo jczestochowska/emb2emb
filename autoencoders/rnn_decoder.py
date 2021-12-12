@@ -60,13 +60,13 @@ class RNNDecoder(Decoder):
         elif self.type == "GRU":
             return x.repeat(self.layers, 1, 1)
 
-    def decode(self, x, train=False, actual=None, lengths=None, beam_width=1, desired_length=None):
+    def decode(self, x, train=False, actual=None, batch_lengths=None, beam_width=1, desired_length=None):
         if self.unit_sphere:
             h = h / h.norm(p=None, dim=-1, keepdim=True)
 
         if not train:
             if beam_width != 1:
-                return self.beam_decode(x, beam_width, desired_length=desired_length)
+                return self.beam_decode(x, beam_width, desired_length=desired_length, lenghts=batch_lengths)
             else:
                 return self.greedy_decode(x)
         else:
@@ -77,14 +77,14 @@ class RNNDecoder(Decoder):
 
             predictions = []
 
-            for t in range(1, lengths.max()):
+            for t in range(1, batch_lengths.max()):
                 output, h = self.decoder(embedded_input, h)
                 # lstm input: (batch, seq_len, input_size)
                 # lstm output: (batch, seq_len, hidden_size)
                 res = self.out(output.squeeze(1))
 
                 ret = res.clone()
-                ret *= torch.gt(lengths.reshape(-1, 1), t).float()
+                ret *= torch.gt(batch_lengths.reshape(-1, 1), t).float()
 
                 predictions.append(ret)
 
@@ -233,7 +233,7 @@ class RNNDecoder(Decoder):
         return self.clip_predictions(predictions)
 
     # Only works for LSTM
-    def beam_decode(self, x, beam_width=10, desired_length=None):
+    def beam_decode(self, x, beam_width=10, desired_length=None, lenghts=None):
         # x = (batch, hidden_size)
         # hidden_lstm = (layers, batch, hidden)
         h = self.init_hidden(x)
@@ -314,6 +314,8 @@ class RNNDecoder(Decoder):
                     beam_index = torch.div(index, self.vocab_size, rounding_mode='floor')
                     word_index = index % self.vocab_size
                     prev_beam = incomplete[batch][beam_index]
+                    if type(desired_length) == float:
+                        desired_length = int(desired_length * lenghts[batch])
                     if prev_beam.length == desired_length or word_index == self.eos_idx:
                         # we hit the end of the sequence! Therefore, this element
                         # of the batch is now complete.

@@ -19,7 +19,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.config = config
 
-    def decode(self, x, train=False, actual=None, lengths=None, beam_width=1):
+    def decode(self, x, train=False, actual=None, batch_lengths=None, beam_width=1):
         pass
 
     def decode_teacher_forcing(self, x, actual, lengths):
@@ -99,8 +99,8 @@ class AutoEncoder(nn.Module):
     def encode(self, x, lengths):
         return self.encoder.encode(x, lengths, reparameterize=False)
 
-    def decode(self, x, beam_width=1):
-        return self.decoder.decode(x, beam_width=beam_width, desired_length=self.desired_length)
+    def decode(self, x, beam_width=1, batch_lengths=None):
+        return self.decoder.decode(x, beam_width=beam_width, desired_length=self.desired_length, batch_lengths=batch_lengths)
 
     def decode_training(self, h, actual, lengths):
         """

@@ -1,18 +1,17 @@
 import numpy as np
 import usc_dae_utils.operations as operations
 
+
 # Inspired by autoencode.py from usc_dae model
-
-
 
 
 def additive_noise(sent_batch,
                    lengths,
                    next_batch,
-                   ae_add_noise_perc_per_sent_low = 0.2,
-                   ae_add_noise_perc_per_sent_high = 0.5,
-                   ae_add_noise_num_sent = 2,
-                   ae_add_noise_2_grams = True):
+                   ae_add_noise_perc_per_sent_low=0.2,
+                   ae_add_noise_perc_per_sent_high=0.5,
+                   ae_add_noise_num_sent=2,
+                   ae_add_noise_2_grams=True):
     """
     Default values taken from usc_dae config
     "ae_add_noise_perc_per_sent_low": 0.2,
@@ -21,7 +20,6 @@ def additive_noise(sent_batch,
     "ae_add_noise_2_grams": true,
     """
     assert ae_add_noise_perc_per_sent_low <= ae_add_noise_perc_per_sent_high
-    batch_size = len(lengths)
     if ae_add_noise_2_grams:
         shuffler_func = operations.shuffle_2_grams
     else:
