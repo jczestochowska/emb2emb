@@ -390,8 +390,6 @@ def train(params):
             next_stidx = stidx + k
             next_stidx = next_stidx if (next_stidx) < len(Sx) else 0
             next_x_batch = Sx[next_stidx:next_stidx + k]
-            # print(next_stidx, len(Sx))
-            print(next_stidx, len(Sx), k)
 
             with torch.autograd.set_detect_anomaly(True):
                 # model forward
