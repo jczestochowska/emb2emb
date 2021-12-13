@@ -282,7 +282,8 @@ def evaluate_gigaword(model, dataset, params=None):
             print("======= Exception for batch rouge calculation ========")
             print(pred_outputs, ground_truth)
     pred_outputs = pred_outputs[-params.max_prints:]
-    for i in range(params.max_prints, 0, -1):
+    num_prints = min(params.max_prints, len(Sx_batch))
+    for i in range(num_prints, 0, -1):
         pretty_print_prediction(inputs[-i], refs[-i], pred_outputs[-i])
 
     df = pd.DataFrame(rouges)
