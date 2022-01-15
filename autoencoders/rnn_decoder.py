@@ -316,8 +316,7 @@ class RNNDecoder(Decoder):
                     prev_beam = incomplete[batch][beam_index]
                     if type(desired_length) == float:
                         desired_length = int(desired_length * lenghts[batch])
-                    # if prev_beam.length == desired_length or word_index == self.eos_idx:
-                    if word_index == self.eos_idx:
+                    if prev_beam.length == desired_length or word_index == self.eos_idx:
                         # we hit the end of the sequence! Therefore, this element
                         # of the batch is now complete.
 

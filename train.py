@@ -261,8 +261,8 @@ def configure_fgim(params, emb2emb):
 
 def train(params):
     timestamp = str(time.time())
-    # with open(os.path.join(params.outputdir, f"phi_config_{timestamp.split('.')[0]}.json"), "w") as f:
-    #     json.dump(vars(params), f)
+    with open(os.path.join(params.outputdir, f"phi_config_{timestamp.split('.')[0]}.json"), "w") as f:
+        json.dump(vars(params), f)
     # set gpu device
     device = torch.device(params.device)
     print("Using device {}".format(str(device)))
@@ -273,10 +273,11 @@ def train(params):
     print('\ntogrep : {0}\n'.format(sys.argv[1:]))
     print(params)
 
-    # outputmodelname = params.outputmodelname.split(".")
-    # outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
-    # if params.emb2emb_additive_noise:
-    #     outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "_with_noise_" + "." + outputmodelname[1]
+    outputmodelname = params.outputmodelname
+    if params.emb2emb_additive_noise:
+        outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "_with_noise_" + "." + outputmodelname[1]
+
+    outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
     # save mapping model path for later use
     outputmodelname = params.outputmodelname
     params.emb2emb_outputmodelname = params.outputmodelname

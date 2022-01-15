@@ -272,7 +272,8 @@ def evaluate_gigaword(model, dataset, params=None):
         Sx_batch = inputs[stidx:stidx + params.batch_size]
         # model forward
         with torch.no_grad():
-            pred_outputs = model(Sx_batch, Sx_batch, next_x_batch=None)
+            other_args = {'next_x_batch': []} if params.emb2emb_additive_noise else {}
+            pred_outputs = model(Sx_batch, Sx_batch, **other_args)
         ground_truth = refs[stidx:stidx + params.batch_size]
         try:
             rouges.append(calculate_rouge_metrics(pred_outputs, ground_truth)['rouge-l'])
