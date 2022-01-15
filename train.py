@@ -103,6 +103,8 @@ def get_train_parser():
     parser.add_argument("--fgim_no_stop_criterion", action="store_true")
     parser.add_argument("--fgim_weights", type=float,
                         nargs="+", default=[10e0, 10e1, 10e2, 10e3])
+    parser.add_argument("--emb2emb_additive_noise", action="store_true",
+                        help="Should we add additive noise when training phi (used for summarization training)")
 
     # adversarial reg for mapping
     parser.add_argument("--adversarial_regularization", action="store_true",
@@ -135,6 +137,7 @@ def get_train_parser():
                         help="Whether to compute self-bleu scores on WikiLarge.")
     parser.add_argument("--invert_style", action="store_true",
                         help="Whether to invert the style transfer task (Yelp).")
+
     return parser
 
 
@@ -202,16 +205,9 @@ def get_lossfn(params, encoder, data):
         params.latent_binary_classifier = bclf
         return FlipLoss(baseloss, bclf, lambda_clfloss=params.lambda_clfloss)
     elif params.loss == "summaryloss":
-        if params.baseloss == "cosine":
-            baseloss = CosineLoss()
-        elif params.baseloss == "mse":
-            baseloss = MSELoss()
-        else:
-            raise ValueError(f"Unknown base loss {params.baseloss}.")
-
         pxty_reg = train_perplexity_regressor(data['Sx'], encoder, params)
         params.latent_perplexity_regressor = pxty_reg
-        return SummaryLoss(baseloss, pxty_reg, lambda_regloss=params.lambda_regloss, device=params.device)
+        return SummaryLoss(CosineLoss(), pxty_reg, lambda_regloss=params.lambda_regloss, device=params.device)
 
 
 def get_mode(params):
@@ -277,10 +273,12 @@ def train(params):
     print('\ntogrep : {0}\n'.format(sys.argv[1:]))
     print(params)
 
-    outputmodelname = params.outputmodelname
-    # .split(".")
+    # outputmodelname = params.outputmodelname.split(".")
     # outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
+    # if params.emb2emb_additive_noise:
+    #     outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "_with_noise_" + "." + outputmodelname[1]
     # save mapping model path for later use
+    outputmodelname = params.outputmodelname
     params.emb2emb_outputmodelname = params.outputmodelname
     """
     SEED
@@ -292,7 +290,7 @@ def train(params):
 
     """
     DATA
-    """ 
+    """
     (train, valid, test), eval_function = get_data(params)
 
     """
@@ -301,6 +299,7 @@ def train(params):
     # model
     encoder = get_encoder(params, device).to(device)
     decoder = get_decoder(params, device)
+    # THIS IS PHI
     emb2emb = get_emb2emb(params, encoder, train)
     loss_fn = get_lossfn(params, encoder, train)
     mode = get_mode(params)
@@ -321,7 +320,8 @@ def train(params):
                         params.real_data_path),
                     fast_gradient_iterative_modification=params.fast_gradient_iterative_modification,
                     fgim_decay=params.fgim_decay,
-                    fgim_start_at_y=params.fgim_start_at_y
+                    fgim_start_at_y=params.fgim_start_at_y,
+                    emb2emb_additive_noise=params.emb2emb_additive_noise
                     )
 
     if params.fast_gradient_iterative_modification:
@@ -377,8 +377,12 @@ def train(params):
             # prepare batch
             Sx_batch = Sx[stidx:stidx + params.batch_size]
             Sy_batch = Sy[stidx:stidx + params.batch_size]
-
             k = len(Sx_batch)  # actual batch size
+
+            # prepare next x_batch for additive noise
+            next_stidx = stidx + k
+            next_stidx = next_stidx if (next_stidx) < len(Sx) else 0
+            next_x_batch = Sx[next_stidx:next_stidx + k]
 
             with torch.autograd.set_detect_anomaly(True):
                 # model forward
@@ -386,13 +390,13 @@ def train(params):
 
                     # forward pass
                     loss, task_loss, critic_loss, train_critic_loss = model(
-                        Sx_batch, Sy_batch)
+                        Sx_batch, Sy_batch, next_x_batch)
                     all_costs.append(
                         [loss.item(), task_loss.item(), critic_loss.item(), train_critic_loss.item()])
                     critic_losses.append(critic_loss.item())
 
                 else:
-                    loss = model(Sx_batch, Sy_batch)
+                    loss = model(Sx_batch, Sy_batch, next_x_batch)
 
                     # loss
                     all_costs.append(loss.item())
@@ -485,10 +489,14 @@ def train(params):
                 # prepare batch
                 Sx_batch = Sx[stidx:stidx + params.batch_size]
                 Sy_batch = Sy[stidx:stidx + params.batch_size]
+                # prepare next x_batch for additive noise
+                next_stidx = stidx + params.batch_size
+                next_stidx = next_stidx if next_stidx < len(Sx) else 0
+                next_x_batch = Sx[next_stidx:next_stidx + params.batch_size]
 
                 # model forward
                 with torch.no_grad():
-                    outputs = model(Sx_batch, Sy_batch)
+                    outputs = model(Sx_batch, Sy_batch, next_x_batch)
 
                 if params.print_outputs:
                     for i in range(len(Sx_batch[:5])):
@@ -517,30 +525,30 @@ def train(params):
     """
     Train model
     """
-    epoch = 1
+    # epoch = 1
 
-    while not stop_training and epoch <= params.n_epochs:
-        train_loss = trainepoch(epoch)
-        if params.adversarial_regularization:
-            print('Epoch {0} ; loss {1} ; lambda {2}'.format(
-                epoch, train_loss, model.adversarial_lambda))
-        else:
-            print('Epoch {0} ; loss {1}'.format(
-                epoch, train_loss))
-
-        # if params.validate and params.validation_frequency < 0:
-            # evaluate(epoch, 'valid')
-        epoch += 1
+    # while not stop_training and epoch <= params.n_epochs:
+    #     train_loss = trainepoch(epoch)
+    #     if params.adversarial_regularization:
+    #         print('Epoch {0} ; loss {1} ; lambda {2}'.format(
+    #             epoch, train_loss, model.adversarial_lambda))
+    #     else:
+    #         print('Epoch {0} ; loss {1}'.format(
+    #             epoch, train_loss))
+    #
+    #     # if params.validate and params.validation_frequency < 0:
+    #     # evaluate(epoch, 'valid')
+    #     epoch += 1
 
     # Run best model on test set.
     if params.validate:
-        try:
-            checkpoint = torch.load(os.path.join(
-                params.outputdir, outputmodelname))
-            model.load_state_dict(checkpoint["model_state_dict"])
-        except:
-            # no model saved so far
-            pass
+        # try:
+        checkpoint = torch.load(os.path.join(
+            params.outputdir, outputmodelname))
+        model.load_state_dict(checkpoint["model_state_dict"])
+        # except:
+            # no model d so far
+            # print("Can't load the model")
 
     results = {}
     # if params.validate:
@@ -551,6 +559,7 @@ def train(params):
     # outputmodelname = outputmodelname.split(".")
     # checkpoint = {"model_state_dict": model.state_dict()}
     # torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname[0] + "phi." + outputmodelname[1]))
+    # torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname))
     return results
 
 
