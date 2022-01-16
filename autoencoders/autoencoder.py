@@ -19,7 +19,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.config = config
 
-    def decode(self, x, train=False, actual=None, lengths=None, beam_width=1):
+    def decode(self, x, train=False, actual=None, batch_lengths=None, beam_width=1):
         pass
 
     def decode_teacher_forcing(self, x, actual, lengths):
@@ -33,6 +33,7 @@ class AutoEncoder(nn.Module):
         self.decoder = decoder
         self.tokenizer = tokenizer
         self.config = config
+        self.desired_length = config.desired_length
         self.adversarial = config.adversarial
         self.variational = config.variational
         self.denoising = config.denoising
@@ -80,8 +81,7 @@ class AutoEncoder(nn.Module):
             decoded_pred = self.decoder.decode_teacher_forcing(
                 encoded, x, lengths)
         else:
-            decoded_pred = self.decoder.decode(
-                encoded, train=True, actual=x, lengths=lengths)
+            decoded_pred = self.decoder.decode(encoded)
 
         # ret:                      (batch, seq_len, classes)
         if self.variational:
@@ -99,14 +99,14 @@ class AutoEncoder(nn.Module):
     def encode(self, x, lengths):
         return self.encoder.encode(x, lengths, reparameterize=False)
 
-    def decode(self, x, beam_width=1):
-        return self.decoder.decode(x, beam_width=beam_width)
+    def decode(self, x, beam_width=1, batch_lengths=None):
+        return self.decoder.decode(x, beam_width=beam_width, desired_length=self.desired_length, batch_lengths=batch_lengths)
 
     def decode_training(self, h, actual, lengths):
         """
         Decoding step to be used for downstream training
         """
-        return self.decoder.decode(h, train=True, actual=actual, lengths=lengths)
+        return self.decoder.decode(h)
 
     def loss(self, predictions, embeddings, labels, reduction="mean"):
         # predictions:  (batch, seq_len, classes)

@@ -4,9 +4,11 @@ from random import randint
 from os.path import join
 from sari.SARI import SARIsent
 import torch
+from rouge import Rouge
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import numpy as np
+import pandas as pd
 
 
 def read_all(path):
@@ -53,6 +55,13 @@ def get_data(params):
             params.binary_classifier = None
         params.current_epoch = 0
         return _get_data_pairs(params), evaluate_yelp
+    elif 'gigaword' in params.dataset_path:
+        params.run_id = randint(0, 999999999)
+        # load the perplexity regressor
+        if params.perplexity_regressor_path == "no_eval":
+            params.perplexity_regressor_path = -1
+        params.current_epoch = 0
+        return _get_data_pairs(params), evaluate_gigaword
     else:
         raise ValueError("Don't know dataset " + str(params.dataset_path))
 
@@ -197,7 +206,8 @@ def bleu_tokenize(s):
     return s.split()
 
 
-def evaluate_bleu(model, input_sentences, reference_sentences, batch_size, max_prints, return_predictions=False, predictions=None):
+def evaluate_bleu(model, input_sentences, reference_sentences, batch_size, max_prints, return_predictions=False,
+                  predictions=None):
     model.eval()
 
     if predictions is None:
@@ -228,7 +238,6 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
     model.eval()
 
     pred_outputs = []
-    i = 1
     for i, stidx in enumerate(range(0, len(input_sentences), batch_size)):
         if i % 10 == 0:
             print("Eval progress:", float(stidx) / len(input_sentences))
@@ -247,8 +256,46 @@ def _get_predictions(model, input_sentences, reference_sentences, batch_size, ma
     return pred_outputs
 
 
-def evaluate_wiki(model, mode="valid", params=None):
+def evaluate_gigaword(model, dataset, params=None):
+    inputs = dataset['Sx']
+    refs = dataset['Sy']
 
+    model.eval()
+
+    pred_outputs = ['' for _ in range(len(inputs))]
+    rouges = []
+    for i, stidx in enumerate(range(0, len(inputs), params.batch_size)):
+        if i % 10 == 0:
+            print("Eval progress:", float(stidx) / len(inputs))
+
+        # prepare batch
+        Sx_batch = inputs[stidx:stidx + params.batch_size]
+        # model forward
+        with torch.no_grad():
+            other_args = {'next_x_batch': []} if params.emb2emb_additive_noise else {}
+            pred_outputs = model(Sx_batch, Sx_batch, **other_args)
+        ground_truth = refs[stidx:stidx + params.batch_size]
+        try:
+            rouges.append(calculate_rouge_metrics(pred_outputs, ground_truth)['rouge-l'])
+        except ValueError as e:
+            print(e)
+            print("======= Exception for batch rouge calculation ========")
+            print(pred_outputs, ground_truth)
+    pred_outputs = pred_outputs[-params.max_prints:]
+    num_prints = min(params.max_prints, len(Sx_batch))
+    for i in range(num_prints, 0, -1):
+        pretty_print_prediction(inputs[-i], refs[-i], pred_outputs[-i])
+
+    df = pd.DataFrame(rouges)
+    return dict((df.sum() * params.batch_size) / len(inputs))
+
+
+def calculate_rouge_metrics(model_outputs, reference, metrics=["rouge-1", "rouge-2", "rouge-3", "rouge-l"], avg=True):
+    rouge = Rouge(metrics=metrics)
+    return rouge.get_scores(ignore_empty=True, hyps=model_outputs, refs=reference, avg=avg)
+
+
+def evaluate_wiki(model, mode="valid", params=None):
     sari, predictions = evaluate_sari(model, mode, params)
     b_acc = eval_binary_accuracy(model, predictions, mode, params)
 
@@ -257,7 +304,8 @@ def evaluate_wiki(model, mode="valid", params=None):
                          max_prints=0, return_predictions=False, predictions=predictions)
     if params.eval_self_bleu:
         self_bleu = evaluate_bleu(model, norm_sentences, [
-                                  [n] for n in norm_sentences], params.batch_size, max_prints=0, return_predictions=False, predictions=predictions)
+            [n] for n in norm_sentences], params.batch_size, max_prints=0, return_predictions=False,
+                                  predictions=predictions)
     else:
         self_bleu = -1.
 
@@ -337,7 +385,6 @@ def _get_data_pairs(params):
     data_dict = {e: {} for e in endings}
     for ending in endings:
         s1 = read_file(join(dataset_path, "s1." + ending), params)
-        s1 = s1
         s2 = read_file(join(dataset_path, "s2." + ending), params)
         data_dict[ending]["Sx"] = s1 if not params.invert_style else s2
         data_dict[ending]["Sy"] = s2 if not params.invert_style else s1

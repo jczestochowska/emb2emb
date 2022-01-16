@@ -1,14 +1,14 @@
 """
 Module to train mapping and the baseline model.
 """
-from re import A
+import time
+from random import choices
+
 import torch
 from torch import nn
-from random import choices
-from .fgim import fast_gradient_iterative_modification
-import time
-from emb2emb.fgim import make_binary_classification_loss
+
 from additive_noise import additive_noise
+from .fgim import fast_gradient_iterative_modification
 
 MODE_EMB2EMB = "mapping"
 MODE_SEQ2SEQ = "seq2seq"
@@ -95,7 +95,7 @@ class Emb2Emb(nn.Module):
                  fgim_criterion_f=None,
                  fgim_start_at_y=False,
                  fgim_max_steps=30,
-                 emb2emb_additive_noise=True):
+                 emb2emb_additive_noise=False):
         """Constructor method"""
         super(Emb2Emb, self).__init__()
         self.encoder = encoder
@@ -116,6 +116,7 @@ class Emb2Emb(nn.Module):
         self.total_time_fgim = 0.
         self.total_emb2emb_time = 0.
         self.total_inference_time = 0.
+        self.emb2emb_additive_noise = emb2emb_additive_noise
 
         if mode in [MODE_FINETUNEDECODER, MODE_EMB2EMB, MODE_SEQ2SEQFREEZE]:
             for p in self.encoder.parameters():
@@ -157,7 +158,7 @@ class Emb2Emb(nn.Module):
             raise ValueError("Invalid mode.")
         self.mode = new_mode
 
-    def _decode(self, output_embeddings, target_batch=None, Y_embeddings=None):
+    def _decode(self, output_embeddings, target_batch=None, Y_embeddings=None, batch_lengths=None):
         if self.mode == MODE_EMB2EMB or not self.training:
 
             if self.fast_gradient_iterative_modification:
@@ -178,7 +179,7 @@ class Emb2Emb(nn.Module):
                 self.total_time_fgim = self.total_time_fgim + \
                     (time.time() - start_time)
 
-            outputs = self.decoder(output_embeddings)
+            outputs = self.decoder(output_embeddings, batch_lengths=batch_lengths)
             return outputs
 
         elif self.mode in [MODE_SEQ2SEQ, MODE_FINETUNEDECODER, MODE_SEQ2SEQFREEZE]:
@@ -194,11 +195,11 @@ class Emb2Emb(nn.Module):
 
     def _encode(self, S_batch):
         if self.mode in [MODE_EMB2EMB, MODE_FINETUNEDECODER, MODE_SEQ2SEQ, MODE_SEQ2SEQFREEZE]:
-            embeddings = self.encoder(S_batch)
+            embeddings, batch_lengths = self.encoder(S_batch)
+            return embeddings, batch_lengths
         else:
             raise ValueError(
                 "Undefined behavior for encoding in mode " + self.mode)
-        return embeddings
 
     def _train_critic(self, real_embeddings, generated_embeddings):
         self._get_critic().train()
@@ -265,13 +266,14 @@ class Emb2Emb(nn.Module):
         # encode input
         sent_batch = Sx_batch
 
-        Sx_noised = additive_noise(
-                sent_batch=sent_batch,
-                # Tokenize to get lengths
-                lengths=[len(self.encoder.model.tokenizer.encode("<SOS>" + s + "<EOS>").ids) for s in Sx_batch],
-                next_batch=next_x_batch,
-            )
-        X_embeddings = self._encode(Sx_noised)
+        if self.emb2emb_additive_noise and next_x_batch:
+            Sx_batch = additive_noise(
+                    sent_batch=sent_batch,
+                    # Tokenize to get lengths
+                    lengths=[len(self.encoder.model.tokenizer.encode("<SOS>" + s + "<EOS>").ids) for s in Sx_batch],
+                    next_batch=next_x_batch,
+                )
+        X_embeddings, batch_lengths = self._encode(Sx_batch)
 
         # mapping step
         if not self.training:  # measure the time it takes to run through mapping, but only at inference time
@@ -283,7 +285,7 @@ class Emb2Emb(nn.Module):
             self.total_emb2emb_time = self.total_emb2emb_time + \
                 (time.time() - s_time)
 
-        return output_embeddings, X_embeddings
+        return output_embeddings, X_embeddings, batch_lengths
 
     def compute_loss(self, output_embeddings, Y_embeddings):
         loss = self.loss_fn(output_embeddings, Y_embeddings)
@@ -300,7 +302,7 @@ class Emb2Emb(nn.Module):
             return self._adversarial_training(loss, output_embeddings, real_data)
         return loss
 
-    def forward(self, Sx_batch, Sy_batch, next_x_batch):
+    def forward(self, Sx_batch, Sy_batch, next_x_batch=None):
         """
         Propagates through the mapping framework. Takes as input two lists of
         texts corresponding to the input and outputs. Returns loss (single scalar)
@@ -310,13 +312,13 @@ class Emb2Emb(nn.Module):
         if not self.training:
             s_time = time.time()
 
-        output_embeddings, X_embeddings = self.compute_emb2emb(Sx_batch, next_x_batch)
+        output_embeddings, X_embeddings, batch_lengths = self.compute_emb2emb(Sx_batch, next_x_batch)
 
         if self.training:
             # compute loss depending on the mode
 
             if self.mode == MODE_EMB2EMB:
-                Y_embeddings = self._encode(Sy_batch)
+                Y_embeddings, _ = self._encode(Sy_batch)
 
                 loss = self.compute_loss(output_embeddings, Y_embeddings)
                 if self.use_adversarial_term:
@@ -338,7 +340,7 @@ class Emb2Emb(nn.Module):
                 return loss
         else:
             # return textual output
-            out = self._decode(output_embeddings, Y_embeddings=X_embeddings)
+            out = self._decode(output_embeddings, Y_embeddings=X_embeddings, batch_lengths=batch_lengths)
             self.total_inference_time = self.total_inference_time + \
                 (time.time() - s_time)
             return out

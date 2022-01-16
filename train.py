@@ -3,17 +3,18 @@ import sys
 import time
 import argparse
 import random
-
+import json
 import numpy as np
 
 import torch
 import torch.nn as nn
 
 from torch.nn.modules.loss import MSELoss, CrossEntropyLoss
-from emb2emb.losses import CosineLoss, FlipLoss
+from emb2emb.losses import CosineLoss, FlipLoss, SummaryLoss
 from classifier import train_binary_classifier
 from emb2emb.fgim import binary_classification_criterion,\
     make_binary_classification_loss, not_matched
+from regressor import train_perplexity_regressor
 
 DEFAULT_CONFIG = "autoencoders/config/default.json"
 
@@ -27,7 +28,9 @@ def get_train_parser():
     parser = argparse.ArgumentParser(description='Emb2Emb')
     # paths
     parser.add_argument("--dataset_path", type=str,
-                        required=True, choices=["data/yelp", "data/wikilarge"], help="Path to dataset")
+                        required=True,
+                        # choices=["data/yelp", "data/wikilarge_downsampled", "data/gigaword"],
+                        help="Path to dataset")
     parser.add_argument("--outputdir", type=str,
                         default='savedir/', help="Output directory")
     parser.add_argument("--outputmodelname", type=str, default='model.pickle')
@@ -41,6 +44,8 @@ def get_train_parser():
                         help="If 'input' is specified, we use the target sequence embeddings for adversarial regularization. Otherwise randomly sample from the data file given at the path.")
     parser.add_argument("--binary_classifier_path", type=str, default=None,
                         help="Path to the BERT SequenceClassification model and it's tokenizer.")
+    parser.add_argument("--perplexity_regressor_path", type=str, default=None,
+                        help="Path to the Perplexity Regressor Model")
     parser.add_argument("--output_file", type=str, default='output.csv',
                         help="Output file for csv to store results.")
     parser.add_argument("--load_emb2emb_path", type=str, default=None,
@@ -51,10 +56,13 @@ def get_train_parser():
     parser.add_argument("--validation_frequency", type=int, default=-1)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--lr_bclf", type=float, default=0.0001)
+    parser.add_argument("--lr_pxtyreg", type=float, default=0.001)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--n_epochs", type=int, default=20)
     parser.add_argument("--n_epochs_binary", type=int, default=5)
+    parser.add_argument("--n_epochs_regressor", type=int, default=5)
     parser.add_argument("--load_binary_clf", action="store_true")
+    parser.add_argument("--load_perplexity_reg", action="store_true")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--mode", type=str, default=MODE_EMB2EMB, help="The training mode to use.",
                         choices=[MODE_EMB2EMB, MODE_FINETUNEDECODER, MODE_SEQ2SEQ, MODE_SEQ2SEQFREEZE])
@@ -73,11 +81,13 @@ def get_train_parser():
     parser.add_argument("--meanoffsetvector_factor", type=float,
                         default=2., help="Initialization for MeanOffsetVector factor.")
     parser.add_argument("--loss", type=str, default='cosine',
-                        help="loss", choices=["mse", "cosine", "ce", "fliploss"])
+                        help="loss", choices=["mse", "cosine", "ce", "fliploss", "summaryloss"])
     parser.add_argument("--baseloss", type=str, default='cosine', help="loss",
                         choices=["mse", "cosine"])
     parser.add_argument("--lambda_clfloss", type=float, default=0.5,
                         help="Weight of the clf loss in comparison to the baseloss. Specify between 0 and 1.")
+    parser.add_argument("--lambda_regloss", type=float, default=0.5,
+                        help="Weight of the regression loss in comparison to the baseloss. Specify between 0 and 1.")
     parser.add_argument("--n_layers", type=int, default=1,
                         help="Number of layers to use in the Emb2Emb model.")
     parser.add_argument("--hidden_layer_size", type=int, default=1024,
@@ -93,6 +103,8 @@ def get_train_parser():
     parser.add_argument("--fgim_no_stop_criterion", action="store_true")
     parser.add_argument("--fgim_weights", type=float,
                         nargs="+", default=[10e0, 10e1, 10e2, 10e3])
+    parser.add_argument("--emb2emb_additive_noise", action="store_true",
+                        help="Should we add additive noise when training phi (used for summarization training)")
 
     # adversarial reg for mapping
     parser.add_argument("--adversarial_regularization", action="store_true",
@@ -126,9 +138,6 @@ def get_train_parser():
     parser.add_argument("--invert_style", action="store_true",
                         help="Whether to invert the style transfer task (Yelp).")
 
-
-    parser.add_argument("--emb2emb_additive_noise", type=bool, default=True,
-                        help="Should we add additive noise when training phi (used for summarization training)")
     return parser
 
 
@@ -190,12 +199,15 @@ def get_lossfn(params, encoder, data):
         elif params.baseloss == "mse":
             baseloss = MSELoss()
         else:
-            raise ValueError("Unknown base loss {params.baseloss}.")
+            raise ValueError(f"Unknown base loss {params.baseloss}.")
 
         bclf = train_binary_classifier(data['Sx'], data['Sy'], encoder, params)
         params.latent_binary_classifier = bclf
-        return FlipLoss(baseloss, bclf,
-                        lambda_clfloss=params.lambda_clfloss)
+        return FlipLoss(baseloss, bclf, lambda_clfloss=params.lambda_clfloss)
+    elif params.loss == "summaryloss":
+        pxty_reg = train_perplexity_regressor(data['Sx'], encoder, params)
+        params.latent_perplexity_regressor = pxty_reg
+        return SummaryLoss(CosineLoss(), pxty_reg, lambda_regloss=params.lambda_regloss, device=params.device)
 
 
 def get_mode(params):
@@ -248,7 +260,9 @@ def configure_fgim(params, emb2emb):
 
 
 def train(params):
-
+    timestamp = str(time.time())
+    with open(os.path.join(params.outputdir, f"phi_config_{timestamp.split('.')[0]}.json"), "w") as f:
+        json.dump(vars(params), f)
     # set gpu device
     device = torch.device(params.device)
     print("Using device {}".format(str(device)))
@@ -259,9 +273,14 @@ def train(params):
     print('\ntogrep : {0}\n'.format(sys.argv[1:]))
     print(params)
 
-    outputmodelname = params.outputmodelname + str(time.time())
+    outputmodelname = params.outputmodelname
+    if params.emb2emb_additive_noise:
+        outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "_with_noise_" + "." + outputmodelname[1]
+
+    outputmodelname = outputmodelname[0] + timestamp.split(".")[0] + "." + outputmodelname[1]
     # save mapping model path for later use
-    params.emb2emb_outputmodelname = outputmodelname
+    outputmodelname = params.outputmodelname
+    params.emb2emb_outputmodelname = params.outputmodelname
     """
     SEED
     """
@@ -313,7 +332,7 @@ def train(params):
 
     if params.load_emb2emb_path is not None:
         model.load_state_dict(torch.load(
-            params.load_emb2emb_path)['model_state_dict'])
+            params.load_emb2emb_path)['model_state_dict'], strict=False)
 
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
@@ -359,13 +378,12 @@ def train(params):
             # prepare batch
             Sx_batch = Sx[stidx:stidx + params.batch_size]
             Sy_batch = Sy[stidx:stidx + params.batch_size]
+            k = len(Sx_batch)  # actual batch size
 
             # prepare next x_batch for additive noise
-            next_stidx = stidx + params.batch_size
-            next_stidx = next_stidx if next_stidx < len(Sx) else 0
-            next_x_batch = Sx[next_stidx:next_stidx + params.batch_size]
-
-            k = len(Sx_batch)  # actual batch size
+            next_stidx = stidx + k
+            next_stidx = next_stidx if (next_stidx) < len(Sx) else 0
+            next_x_batch = Sx[next_stidx:next_stidx + k]
 
             with torch.autograd.set_detect_anomaly(True):
                 # model forward
@@ -402,7 +420,7 @@ def train(params):
                     mean_losses = np.reshape(
                         np.array(all_costs).mean(axis=0), (-1))
                     mean_losses = np.round(mean_losses, decimals=5)
-                    log_string = '{0} ; loss {1} ; sentence/s {2} ; t-loss {3} ; c-loss {4} ; tc-loss {5}'
+                    log_string = '{0} ; loss {1} ; sentence/s {2} ; task-loss {3} ; critic-loss {4} ; task-critic-loss {5}'
                     log_string = log_string.format(
                         stidx, mean_losses[0],
                         int(len(all_costs) * params.batch_size /
@@ -411,25 +429,24 @@ def train(params):
 
                 logs.append(log_string)
                 print(logs[-1])
-                # for p in model.mapping.parameters():
-                #    print(p.grad)
-                #    break
                 last_time = time.time()
                 all_costs = []
 
-            if params.validation_frequency > 0 and (batch_counter % params.validation_frequency) == 0:
-                evaluate(epoch, eval_type='valid', final_eval=False)
-                model.train()
+        if params.validation_frequency > 0 and (epoch % params.validation_frequency) == 0:
+            evaluate(epoch, eval_type='valid')
+            model.train()
 
         params.time_for_epoch = time.time() - start_epoch_time
         return round(np.mean(all_costs), 5)
 
-    def evaluate(epoch, eval_type='valid', final_eval=False):
+    def evaluate(epoch, eval_type='valid'):
         model.eval()
 
         if eval_function is not None:
-            score = eval_function(
-                model, mode="valid" if not final_eval else "test", params=params)
+            dataset = valid
+            if eval_type == 'test':
+                dataset = test
+            score = eval_function(model, dataset=dataset, params=params)
             print("Total Inference time", model.total_inference_time)
             print("Total Emb2Emb time", model.total_emb2emb_time)
             print("Total FGIM time", model.total_time_fgim)
@@ -438,6 +455,13 @@ def train(params):
                 score = tmp_score[0]
                 self_bleu = tmp_score[1]
                 b_acc = tmp_score[2]
+                fscore_rouge_l = None
+            elif type(score) == dict:
+                print(score)
+                fscore_rouge_l = score['f']
+                score = fscore_rouge_l
+                self_bleu = None
+                b_acc = None
             else:
                 self_bleu = None
                 b_acc = None
@@ -489,48 +513,54 @@ def train(params):
             score = 0
 
         eval_string = "Validation-Score in epoch {}/{} : {}; best : {}".format(
-            epoch, batch_counter, score, val_acc_best)
+            epoch, params.n_epochs, score, val_acc_best)
         if b_acc is not None:
             eval_string = eval_string + " ; b-acc : {}".format(b_acc)
         if self_bleu is not None:
             eval_string = eval_string + " ; self-bleu : {}".format(self_bleu)
+        if fscore_rouge_l is not None:
+            eval_string = eval_string + " ; f score rouge-l : {}".format(fscore_rouge_l)
         print(eval_string)
         return score
 
     """
     Train model
     """
-    epoch = 1
+    # epoch = 1
 
-    while not stop_training and epoch <= params.n_epochs:
-        train_loss = trainepoch(epoch)
-        if params.adversarial_regularization:
-            print('Epoch {0} ; loss {1} ; lambda {2}'.format(
-                epoch, train_loss, model.adversarial_lambda))
-        else:
-            print('Epoch {0} ; loss {1}'.format(
-                epoch, train_loss))
-
-        if params.validate and params.validation_frequency < 0:
-            evaluate(epoch, 'valid')
-        epoch += 1
+    # while not stop_training and epoch <= params.n_epochs:
+    #     train_loss = trainepoch(epoch)
+    #     if params.adversarial_regularization:
+    #         print('Epoch {0} ; loss {1} ; lambda {2}'.format(
+    #             epoch, train_loss, model.adversarial_lambda))
+    #     else:
+    #         print('Epoch {0} ; loss {1}'.format(
+    #             epoch, train_loss))
+    #
+    #     # if params.validate and params.validation_frequency < 0:
+    #     # evaluate(epoch, 'valid')
+    #     epoch += 1
 
     # Run best model on test set.
     if params.validate:
-        try:
-            checkpoint = torch.load(os.path.join(
-                params.outputdir, outputmodelname))
-            model.load_state_dict(checkpoint["model_state_dict"])
-        except:
-            # no model saved so far
-            pass
+        # try:
+        checkpoint = torch.load(os.path.join(
+            params.outputdir, outputmodelname))
+        model.load_state_dict(checkpoint["model_state_dict"])
+        # except:
+            # no model d so far
+            # print("Can't load the model")
 
     results = {}
-    if params.validate:
-        final_val_score = evaluate(1e6, 'valid', False)
-        results["dev"] = final_val_score
-    final_test_score = evaluate(0, 'test', True)
+    # if params.validate:
+    #     final_val_score = evaluate(1e6, 'valid')
+    #     results["dev"] = final_val_score
+    final_test_score = evaluate(0, 'test')
     results["test"] = final_test_score
+    # outputmodelname = outputmodelname.split(".")
+    # checkpoint = {"model_state_dict": model.state_dict()}
+    # torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname[0] + "phi." + outputmodelname[1]))
+    # torch.save(checkpoint, os.path.join(params.outputdir, outputmodelname))
     return results
 
 

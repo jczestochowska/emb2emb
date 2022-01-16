@@ -48,7 +48,7 @@ class Encoder(nn.Module):
         existing, non_existing = self.lookup(S_batch)
 
         ids, non_existing_S = zip(*non_existing)
-        new_encoded = self.encode(non_existing_S)
+        new_encoded, batch_lengths = self.encode(non_existing_S)
         new_encoded = zip(ids, new_encoded)
 
         existing.extend(new_encoded)
@@ -56,7 +56,7 @@ class Encoder(nn.Module):
 
         _, embeddings = zip(*existing)
         embeddings = torch.cat(embeddings, dim=0).view(batch_size, -1)
-        return embeddings
+        return embeddings, batch_lengths
 
 
 class Decoder(nn.Module):
@@ -84,13 +84,13 @@ class Decoder(nn.Module):
         """
         pass
 
-    def forward(self, embeddings, target_batch=None):
+    def forward(self, embeddings, target_batch=None, batch_lengths=None):
         """
         Turns a list of strings into a list of embeddings. First checks if
         the embeddings have already been computed.
         """
         outputs = self.predict(
-            embeddings, target_batch=target_batch if self.training else None)
+            embeddings, target_batch=target_batch if self.training else None, batch_lengths=batch_lengths)
         if self.training:
             return outputs
         else:

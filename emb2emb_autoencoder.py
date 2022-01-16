@@ -97,7 +97,8 @@ class AEEncoder(Encoder):
         X, X_lens, sort_idx = self._prepare_batch(indexed, lengths)
         encoded = self.model.encode(X, X_lens)
         # Since _prepare_batch sorts by length, we will need to undo this.
-        return self._undo_batch(encoded, sort_idx)
+        encoded = self._undo_batch(encoded, sort_idx)
+        return encoded, lengths
 
 
 class AEDecoder(Decoder):
@@ -123,16 +124,15 @@ class AEDecoder(Decoder):
         X, X_lens = self._prepare_batch(indexed, lengths)
         return X, X_lens
 
-    def predict(self, S_batch, target_batch=None):
+    def predict(self, S_batch, target_batch=None, batch_lengths=None):
         if self.training:
             target_batch, target_length = self._encode(target_batch)
             out = self.model.decode_training(
                 S_batch, target_batch, target_length)
             return out, target_batch
         else:
-            return self.model.decode(S_batch, beam_width=15)
+            return self.model.decode(S_batch, beam_width=15, batch_lengths=batch_lengths)
 
     def prediction_to_text(self, predictions):
-        predictions = [self.model.tokenizer.decode(
-            p, skip_special_tokens=True) for p in predictions]
+        predictions = [self.model.tokenizer.decode(p, skip_special_tokens=True) for p in predictions]
         return predictions
